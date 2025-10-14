@@ -1,0 +1,27 @@
+{
+  "sheets": {
+    "atest": "assets/sheets/atest",
+    "btest": "assets/sheets/btest",
+    "ctest": "assets/sheets/ctest",
+    "dtest": "assets/sheets/dtest"
+  },
+
+  "animations": {
+    "test": "assets/anims/test"
+  },
+
+  "shaders": {
+    "default_vert": "assets/shaders/default_vert.glsl",
+    "shadowmap_vert": "assets/shaders/shadowmap_vert.glsl",
+
+    "default_frag": "assets/shaders/default_frag.glsl",
+    "fragment_point_light": "assets/shaders/fragment_point_light.glsl",
+    "fragment_global_light": "assets/shaders/fragment_global_light.glsl",
+
+    "fragment_blur": "assets/shaders/fragment_blur.glsl",
+    "shadowmap_frag": "assets/shaders/shadowmap_frag.glsl",
+    "fog_frag": "assets/shaders/fog_frag.glsl",
+
+    "fragment_add": "assets/shaders/fragment_add.glsl"
+  }
+}

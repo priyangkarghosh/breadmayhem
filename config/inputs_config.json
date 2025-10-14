@@ -1,0 +1,11 @@
+{
+  "keyboard": {
+      "move_right": "d",
+      "crouch": "left shift",
+      "jump": "space"
+  },
+
+  "mouse-button": {
+    "shoot": "lmb"
+  }
+}
