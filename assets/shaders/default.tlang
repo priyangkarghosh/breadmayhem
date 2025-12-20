@@ -1,0 +1,25 @@
+[program('default', vert='default_vert', frag='default_frag')]
+
+[shader('vert')]
+[resourceblock(
+    in vec2 vert;
+    in vec2 texcoord;
+    out vec2 uv;
+)]
+void default_vert() {
+    uv = texcoord;
+    gl_Position = vec4(vert, 0.0, 1.0);
+}
+
+[shader('frag')]
+[resourceblock(
+    uniform sampler2D tex;
+    uniform bool flip;
+
+    out vec4 f_colour;
+    in vec2 uv;
+)]
+void default_frag() {
+    vec2 sample_pos = vec2(uv.x, (flip) ? 1 - uv.y : uv.y);
+    f_colour = vec4(texture(tex, sample_pos).rgba);
+}

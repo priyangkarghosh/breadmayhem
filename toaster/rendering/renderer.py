@@ -6,7 +6,7 @@ from typing import Literal, TypedDict
 from toaster.rendering.camera import Camera
 from toaster.rendering.opengl.material import Material
 from toaster.registry.registry_item import RegistryItem
-
+from tlang import ShaderManager
 
 TextureType = Literal['albedo', 'occlusion', 'emissive', 'unlit']
 
@@ -68,6 +68,9 @@ class Renderer(RegistryItem):
         
         # set the blend mode for the context
         self.ctx.enable(mgl.BLEND)
+
+        # create the shader manager
+        self.sm = ShaderManager(self.ctx, '330', "assets/shaders", {})
         
         # create the default screen buffer (covers whole screen)
         self.screen_buffer = self.ctx.buffer(data=array('f', [
@@ -81,8 +84,15 @@ class Renderer(RegistryItem):
         # create and link the necessary textures
         self.render_texture = self.create_texture()
         self.link_texture("render_tex", self.render_texture)
-
-        self.default_mat = self.create_material()
+        
+        prog = self.sm.get_shader('default').get_program('default')
+        self.default_mat = Material(
+            prog, self.ctx.vertex_array(
+                prog, 
+                [(self.screen_buffer, '2f 2f', 'vert', 'texcoord')], 
+                mode=mgl.TRIANGLE_STRIP
+            )
+        )
         
         # texture types we support
         self.texture_types = ['albedo', 'occlusion', 'emissive', 'unlit']
