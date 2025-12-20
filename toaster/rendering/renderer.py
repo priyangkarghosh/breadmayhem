@@ -4,7 +4,7 @@ from array import array
 from typing import Literal, TypedDict
 
 from toaster.rendering.camera import Camera
-from toaster.rendering.opengl.material import Material
+from toaster.rendering.lighting import Lighting
 from toaster.registry.registry_item import RegistryItem
 from tlang import ShaderManager
 
@@ -26,7 +26,8 @@ class LayerDict(TypedDict):
     occlusion_surf: pygame.Surface
     emissive_surf: pygame.Surface
     unlit_surf: pygame.Surface
-    buffer: tuple[mgl.Framebuffer, mgl.Texture]
+    texture: mgl.Texture
+    buffer: mgl.Framebuffer
     dirty: DirtyDict
 
 
@@ -42,7 +43,7 @@ class Renderer(RegistryItem):
         assert "camera" in self.registry
         
         # set the camera for the renderer
-        self.camera = self.registry['camera']
+        self.camera: Camera = self.registry['camera']
         
         # set the render size and calculate the overall window size
         self.render_size = render_size
@@ -71,7 +72,7 @@ class Renderer(RegistryItem):
         self.ctx.enable(mgl.BLEND)
 
         # create the shader manager
-        self.shader_manager = ShaderManager(self.ctx, '330', SHADERS_PATH, {})
+        self.shaders = ShaderManager(self.ctx, '330 core', SHADERS_PATH, {})
         
         # create the default screen buffer (covers whole screen)
         self.screen_buffer = self.ctx.buffer(data=array('f', [
@@ -84,12 +85,14 @@ class Renderer(RegistryItem):
         
         # create and link the necessary textures
         self.render_texture = self.create_texture()
-        self.link_texture("render_tex", self.render_texture)
+
+        # create the lighting renderer
+        self.lighting = Lighting(self)
         
         # create the default material for rendering a surf to a texture
         self.default_mat = self.ctx.vertex_array(
-            self.shader_manager.get_shader('default').get_program('default'), 
-            [(self.screen_buffer, '2f 2f', 'vert', 'texcoord')], 
+            self.shaders.get_shader('default').get_program('default'), # type: ignore
+            [(self.screen_buffer, '2f 2f', 'vert', 'texCoord')], 
             mode=mgl.TRIANGLE_STRIP
         )
         
@@ -99,6 +102,9 @@ class Renderer(RegistryItem):
         # create the layers
         self.layers = []
         for i in range(self.camera.num_layers):
+            tex = self.create_texture(4, 'RGBA')
+            buf = self.ctx.framebuffer(color_attachments=[tex])
+
             layer_dict: LayerDict = {
                 "index": i,
                 "tex_name": "layer_" + str(i),
@@ -108,7 +114,8 @@ class Renderer(RegistryItem):
                 "emissive_surf": pygame.Surface(self.render_size, pygame.SRCALPHA),
                 "unlit_surf": pygame.Surface(self.render_size, pygame.SRCALPHA),
 
-                "buffer": self.create_texture_buffer(),
+                "texture": tex,
+                "buffer": buf,
                 "dirty": {
                     "albedo": False,
                     "occlusion": False,
@@ -116,7 +123,6 @@ class Renderer(RegistryItem):
                     "unlit": False
                 }
             }
-            self.link_texture(layer_dict['tex_name'], layer_dict['buffer'][1])
             self.layers.append(layer_dict)
         
         # list to hold render objects
@@ -136,14 +142,15 @@ class Renderer(RegistryItem):
             # only process layer if something is dirty
             if not any(layer['dirty'].values()):
                 self.ctx.screen.use()
-                self.default_mat.program['tex'] = self.texture_id(layer['tex_name'])
+                layer['texture'].use(1)
+                self.default_mat.program['tex'] = 1
                 self.default_mat.program['flip'] = True
                 self.default_mat.render()
                 continue
             
             # use the layers frame buffer
-            layer['buffer'][0].clear()
-            layer['buffer'][0].use()
+            layer['buffer'].clear()
+            layer['buffer'].use()
             
             # process lit texture
             if layer['dirty']['albedo'] or layer['dirty']['occlusion'] or layer['dirty']['emissive']:
@@ -153,9 +160,10 @@ class Renderer(RegistryItem):
             if layer['dirty']['unlit']:
                 # write the unlit surface to the render_texture
                 self.render_texture.write(layer['unlit_surf'].get_view('1'))
+                self.render_texture.use(1)
                 
                 # set the texture of the program
-                self.default_mat.program['tex'] = self.texture_id("render_tex")
+                self.default_mat.program['tex'] = 1
                 
                 # disable flipping
                 self.default_mat.program['flip'] = False
@@ -169,45 +177,25 @@ class Renderer(RegistryItem):
             
             # ::: RENDER TO SCREEN
             self.ctx.screen.use()
-            self.default_mat.program['tex'] = self.texture_id(layer['tex_name'])
+            layer['texture'].use(1)
+            self.default_mat.program['tex'] = 1
             self.default_mat.program['flip'] = True
             self.default_mat.render()
-    
-    def link_texture(self, texture_name: str, texture: mgl.Texture) -> int:
-        texture.use(self._reg_tex_id)
-        self._textures[texture_name] = self._reg_tex_id
-        self._reg_tex_id += 1
-        return self._reg_tex_id - 1
-    
-    def texture_id(self, texture_name: str) -> int:
-        return self._textures[texture_name]
-    
-    def unlink_texture(self, texture_name: str) -> None:
-        del self._textures[texture_name]
     
     def create_texture(
         self, 
         components: int = 4, 
         swizzle: str = 'BGRA', 
-        size: tuple[int, int] | None = None
+        size: tuple[int, int] | None = None,
+        filter: tuple[int, int] = (mgl.NEAREST, mgl.NEAREST),
+        repeat: tuple[bool, bool] = (False, False)
     ) -> mgl.Texture:
-        if not size: 
-            size = self.render_size
+        if not size: size = self.render_size
         texture: mgl.Texture = self.ctx.texture(size, components)
-        texture.filter = (mgl.NEAREST, mgl.NEAREST)
-        texture.repeat_x, texture.repeat_y = False, False
+        texture.filter = filter
+        texture.repeat_x, texture.repeat_y = repeat
         texture.swizzle = swizzle
         return texture
-    
-    def create_texture_buffer(
-        self, 
-        components: int = 4
-    ) -> tuple[mgl.Framebuffer, mgl.Texture]:
-        buffer: mgl.Framebuffer = self.ctx.framebuffer(
-            color_attachments=[self.create_texture(components, 'RGBA')]
-        )
-        assert isinstance(buffer.color_attachments[0], mgl.Texture)
-        return buffer, buffer.color_attachments[0]
     
     def world_to_tangent(self, point: tuple[float, float], layer: int) -> tuple[float, float]:
         converted_point: tuple[float, float] = self.registry['camera'].world_to_camera(layer, point)

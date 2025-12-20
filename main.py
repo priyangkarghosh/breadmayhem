@@ -39,7 +39,7 @@ tests = []
 # collision test
 for i in range(200):
     test_rect = GameObject("test" + str(i), position=(48 + int(i / 10) * 12 + random.randint(-60, 60), int(i * -12) + i))
-    test_rect.attach_component(RectCollider((5, 5), DYNAMIC, 1, restitution=(0.6, 0.6), damping=(0.6, 0.6)))
+    test_rect.attach_component(RectCollider((5, 5), DYNAMIC, 1, restitution=(0.4, 0.4), damping=(0.2, 0.2)))
     test_rect = test_rect.get_component("rect_collider")
     test_rect._forces[1] = 320
     test_rect._velocity[0] = random.randint(-120, 120)
