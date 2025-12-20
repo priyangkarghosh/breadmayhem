@@ -2,9 +2,7 @@ import time
 import pygame
 
 from pygame.locals import *
-
 from toaster.registry.registry_item import RegistryItem
-
 
 class Window(RegistryItem):
     def __init__(self, size=(640, 480), caption='test_window', flags=0, fps_cap=65, dt_cap=0.2):
