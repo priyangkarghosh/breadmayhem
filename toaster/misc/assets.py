@@ -2,17 +2,15 @@ from pathlib import Path
 from toaster.registry.registry_item import RegistryItem
 from toaster.asset_loaders.spritesheet_loader import load_spritesheet
 
-ASSETS_PATH = Path("assets")
+ASSETS_PATH = "assets"
 
 def load_assets_from_dir(
-    root: str | Path,
+    root: Path,
     loader,
     *,
     allow_files: bool = False
 ) -> dict:
-    root = Path(root)
     assets = {}
-
     if not root.exists():
         return assets
 
@@ -25,13 +23,15 @@ class AssetManager(RegistryItem):
     def __init__(self):
         super().__init__("assets")
 
+        assets_path = Path(ASSETS_PATH)
+
         self.sheets = load_assets_from_dir(
-            ASSETS_PATH / "spritesheets",
+            assets_path / "spritesheets",
             load_spritesheet
         )
 
         self.shaders = load_assets_from_dir(
-            ASSETS_PATH / "shaders",
+            assets_path / "shaders",
             lambda p: p.read_text(),
             allow_files=True
         )

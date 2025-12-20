@@ -1,6 +1,6 @@
 from toaster.registry.registry_item import RegistryItem
 from toaster.physics.physics_rect import PhysicsRect, STATIC
-from toaster.data_structures.rect_tree import RectTree
+from toaster.physics.rect_tree import RectTree
 
 COLLISION_LAYERS = ["DEFAULT", "PLAYER"]
 COLLISION_MATRIX = [
