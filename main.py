@@ -16,7 +16,7 @@ from toaster.registry.registry import Registry
 from toaster.physics.physics_rect import DYNAMIC
 
 # set the sizes
-render_size = (400, 320)
+render_size = (600, 480)
 window_size = (1200, 960)
 Window(flags=HWACCEL, fps_cap=65, size=window_size)
 
@@ -39,12 +39,12 @@ tests = []
 # collision test
 for i in range(200):
     test_rect = GameObject("test" + str(i), position=(48 + int(i / 10) * 12 + random.randint(-60, 60), int(i * -12) + i))
-    test_rect.attach_component(RectCollider((5, 10), DYNAMIC, 1, restitution=(0.6, 0.6), damping=(0.6, 0.6)))
+    test_rect.attach_component(RectCollider((5, 5), DYNAMIC, 1, restitution=(0.6, 0.6), damping=(0.6, 0.6)))
     test_rect = test_rect.get_component("rect_collider")
     test_rect._forces[1] = 320
     test_rect._velocity[0] = random.randint(-120, 120)
     tests.append(test_rect)
-    reg["physics"].add_physics_rect(test_rect)
+    reg.physics.add_physics_rect(test_rect)
 test_colours = [(random.randint(0, 255), random.randint(0, 255), random.randint(0, 255)) for i in range(len(tests))]
 
 """
@@ -64,19 +64,19 @@ while 1:
     for i, test_rect in enumerate(tests):
         if test_rect.rect.top > 500:
             test_rect.transform.position = [random.randint(16, 450), random.randint(-150, -100)]
-        reg["renderer"].layers[1]['lit_surf'].fill(test_colours[i], (*reg["camera"].world_to_camera(1, test_rect.rect.topleft), *test_rect.rect.size))
+        reg["renderer"].layers[1]['unlit_surf'].fill(test_colours[i], (*reg["camera"].world_to_camera(1, test_rect.rect.topleft), *test_rect.rect.size))
         avg[0] += test_rect.transform.position[0]
         avg[1] += test_rect.transform.position[1]
     avg[0] /= len(tests)
     avg[1] /= len(tests)
 
     reg["renderer"].layers[0]['unlit_surf'].fill((255, 255, 255), (*reg["camera"].world_to_camera(0, (50, 50)), 160, 100))
-    reg["renderer"].layers[3]['unlit_surf'].fill((255, 255, 255), (*reg["camera"].world_to_camera(3, (300, 0)), 100, 100))
-    reg["renderer"].layers[1]['lit_surf'].blit(reg['maps'].current_map.map_surf, reg["camera"].world_to_camera(1, (0, 0)))
+    reg["renderer"].layers[3]['unlit_surf'].fill((200, 200, 200), (*reg["camera"].world_to_camera(3, (300, 0)), 100, 100))
+    reg["renderer"].layers[1]['unlit_surf'].blit(reg['maps'].current_map.map_surf, reg["camera"].world_to_camera(1, (0, 0)))
 
     reg["camera"].set_target(avg)
 
-    reg["renderer"].layers[1]['render_lit'] = True
+    reg["renderer"].layers[1]['render_unlit'] = True
     reg["renderer"].layers[3]['render_unlit'] = True
     reg["renderer"].layers[0]['render_unlit'] = True
     reg["renderer"].render()

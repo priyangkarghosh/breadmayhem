@@ -15,9 +15,9 @@ class TreeNode:
     value: Optional[PhysicsRect] = None
     fattened_rect: Optional[Rect] = field(default=None, init=False)
 
-    left: Optional['TreeNode'] = None
-    right: Optional['TreeNode'] = None
-    parent: Optional['TreeNode'] = None
+    left: 'TreeNode | None' = None
+    right: 'TreeNode | None' = None
+    parent: 'TreeNode | None' = None
 
     height: int = 0
 
@@ -34,8 +34,8 @@ class TreeNode:
 # rect tree will always have two children or no children
 class RectTree:
     def __init__(self, fat=(6, 6)):
-        self.root = None
-        self.fat = fat
+        self.root: TreeNode | None = None
+        self.fat: tuple[int, int] = fat
 
     def insert_leaf(self, physics_rect):
         if not self.root:
@@ -43,7 +43,7 @@ class RectTree:
             self.root.fattened_rect = physics_rect.rect.inflate(self.fat)
             return
 
-        temp = self.root
+        temp: TreeNode = self.root
         while not temp.leaf:
             # areas of the different nodes
             left_area = rect_area(temp.left.value.rect)

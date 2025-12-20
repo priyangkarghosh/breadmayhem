@@ -4,7 +4,15 @@ from toaster.registry.registry_item import RegistryItem
 
 class Camera(RegistryItem):
     # layer spacing should be relative to camera, therefore it should always be increasing (0 will be rendered first)
-    def __init__(self, central_layer, camera_distances, position=(0, 0), offset=(0, 0), smoothing=1, origin=(0, 0)):
+    def __init__(
+        self, 
+        central_layer: int, 
+        camera_distances: list[int], 
+        position: tuple[int, int] = (0, 0), 
+        offset: tuple[int, int] = (0, 0), 
+        origin: tuple[int, int] = (0, 0),
+        smoothing: int =1
+    ):
         super().__init__("camera")
 
         # origin and how smoothly the camera should interpolate to targets position
@@ -69,12 +77,12 @@ class Camera(RegistryItem):
 
     def world_to_camera(self, layer, position):
         return (
-            int(position[0] - self.layer_offsets[layer][0]),
-            int(position[1] - self.layer_offsets[layer][1])
+            round(position[0] - self.layer_offsets[layer][0]),
+            round(position[1] - self.layer_offsets[layer][1])
         )
 
     def camera_to_world(self, layer, position):
         return (
-            int(position[0] + self.layer_offsets[layer][0]),
-            int(position[1] + self.layer_offsets[layer][1])
+            round(position[0] + self.layer_offsets[layer][0]),
+            round(position[1] + self.layer_offsets[layer][1])
         )

@@ -46,7 +46,7 @@ class Window(RegistryItem):
         self.frame_log = self.frame_log[-self.fps_cap:]
 
         # process input
-        self.registry['inputs'].update()
+        self.registry.inputs.update()
 
         # reset the screen
         self.screen.fill(self.background_colour)

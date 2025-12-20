@@ -9,9 +9,15 @@ class Registry:
     def __init__(self):
         if Registry._instance is not None:
             raise Exception("Multiple instances of Singleton created.")
-        self.items = {}
+        self.items: dict = {}
 
-    def __getitem__(self, key): return self.items[key]
+    def _get(self, name: str):
+        try: return self.items[name]
+        except KeyError: raise AttributeError(f"Registry has no item '{name}'")
+
+    # dict access
+    def __getitem__(self, name): return self._get(name)
+    def __getattr__(self, name): return self._get(name)
     def __contains__(self, item): return item in self.items
 
     def register_item(self, reg_id, item):

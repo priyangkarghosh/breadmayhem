@@ -1,33 +1,33 @@
 from array import array
 
 import pygame
+from toaster.rendering.camera import Camera
 from toaster.rendering.opengl.material import Material
 from toaster.registry.registry_item import RegistryItem
-
 import moderngl
-
-from toaster.rendering.lighting.light import *
-from toaster.rendering.lighting.light_processor import LightProcessor
 
 
 class Renderer(RegistryItem):
-    def __init__(self, render_size=(300, 300), clear_colour=(0, 0, 0, 0)):
+    def __init__(self, 
+        render_size: tuple[int, int] = (300, 300), 
+        clear_colour: tuple[int, int, int, int] = (0, 0, 0, 0)
+    ):
         super().__init__("renderer")
         assert "assets" in self.registry
         assert "window" in self.registry
         assert "camera" in self.registry
 
         # set the camera for the renderer
-        self.camera = self.registry['camera']
+        self.camera: Camera = self.registry['camera']
 
         # set the render size and calculate the overall window size
         self.render_size = render_size
-        self.aggregate_size = \
+        self.aggregate_size: tuple[int, int] = \
             (render_size[0] * self.camera.num_layers + self.camera.num_layers,
              render_size[1] + 1)  # layers are all stored horizontally
 
         # set the window size and reset colour
-        self.window_size = self.registry['window'].size
+        self.window_size: tuple[int, int] = self.registry['window'].size
         self.clear_colour = clear_colour
         self.view_rect = pygame.Rect(0, 0, *self.render_size)
 
@@ -59,10 +59,7 @@ class Renderer(RegistryItem):
         # create and link the necessary textures
         self.render_texture = self.create_texture()
         self.link_texture("render_tex", self.render_texture)
-        self.normal_texture = self.create_texture()
-        self.link_texture("normal_tex", self.normal_texture)
-        self.generic_texture = self.create_texture()
-        self.link_texture("generic_tex", self.generic_texture)
+        self.default_mat = self.create_material()
 
         # set the layers
         self.layers = []
@@ -79,7 +76,6 @@ class Renderer(RegistryItem):
 
                 "lit_surf": temp_surf.copy(),
                 "unlit_surf": temp_surf.copy(),
-                "normal_surf": temp_surf.copy(),
 
                 "render_lit": False, "render_unlit": False,
                 "buffer": self.create_texture_buffer(),
@@ -91,40 +87,8 @@ class Renderer(RegistryItem):
         # list to hold render objects
         self.render_objects = []
 
-        # create the light processor
-        self.light_processor = LightProcessor(self)
-
-        # create the materials
-        self.default_mat = self.create_material()
-
-        # add demo lights to scene
-        self.add_light(PointLight(tint=(255, 255, 255), radius=150, intensity=0.3), self.camera.central_layer)
-        self.add_light(
-            PointLight(position=(230, -16), angle_range=0.3, direction=(-0.4, 0.6), tint=(255, 0, 255), radius=200,
-                       intensity=0.8, opacity=0.3), self.camera.central_layer)
-        self.add_light(
-            PointLight(position=(60, -80), angle_range=0.4, direction=(0.4, 0.6), tint=(0, 255, 255), radius=400,
-                       intensity=0.4), self.camera.central_layer)
-        self.add_light(
-            PointLight(position=(100, 170), angle_range=0.6, direction=(0.4, -0.6), tint=(255, 255, 0), radius=400,
-                       intensity=0.6), self.camera.central_layer)
-        self.add_light(
-            PointLight(position=(12, 45), angle_range=0.3, direction=(1, 0), tint=(160, 255, 70), radius=100,
-                       intensity=0.4), self.camera.central_layer)
-        self.add_light(PointLight(position=(300, 100), tint=(180, 180, 180), radius=150, intensity=0.006),
-                       self.camera.central_layer)
-        self.add_light(GlobalLight(intensity=0.0001, opacity=0), self.camera.central_layer)
-        self.add_light(GlobalLight(intensity=0.01, opacity=0), 0)
-        self.add_light(GlobalLight(intensity=0.01, opacity=0), 3)
-
     # render the scene
     def render(self):
-        mp = list(self.registry['inputs'].mouse_pos)
-        mp[0] *= 0.5
-        mp[1] *= 0.5
-
-        self.light_processor.lights[self.camera.central_layer][0].position = self.camera.camera_to_world(self.camera.central_layer, mp)
-
         self.ctx.screen.clear()
         self.view_rect.topleft = self.camera.world_to_camera(3, (0, 0))
 
@@ -138,36 +102,21 @@ class Renderer(RegistryItem):
 
             # if the lit surface was rendered to
             if layer['render_lit']:
-                # change the blend function
-                self.ctx.blend_func = moderngl.ADDITIVE_BLENDING
-
-                # write the texture and the normal map using the layer surfaces
                 self.render_texture.write(layer['lit_surf'].get_view('1'))
-                self.normal_texture.write(layer['normal_surf'].get_view('1'))
-
-                # render the lighting for this layer
-                self.light_processor.render(layer['buffer'][0], layer['index'])
 
                 # clear the surfaces
                 layer['lit_surf'].fill((0, 0, 0, 0))
-                layer['normal_surf'].fill((0, 0, 0, 0))
 
-                # change the blend function
-                self.ctx.blend_func = moderngl.DEFAULT_BLENDING
-
-            #self.ctx.disable(moderngl.BLEND)
             # if the unlit surface was rendered to
             if layer['render_unlit']:
                 # write the unlit surface to the render_texture
-                self.generic_texture.write(layer['unlit_surf'].get_view('1'))
-
+                self.render_texture.write(layer['unlit_surf'].get_view('1'))
+                
                 # set the texture of the program
-                self.default_mat.program['tex'] = self.texture_id("generic_tex")
+                self.default_mat.program['tex'] = self.texture_id("render_tex")
 
                 # disable flipping
                 self.default_mat.program['flip'] = False
-
-                # render the unlit texture on top
                 self.default_mat.surface.render()
 
                 # clear the surface
@@ -179,10 +128,6 @@ class Renderer(RegistryItem):
             self.default_mat.program['flip'] = True
             self.default_mat.surface.render()
             #self.ctx.enable(moderngl.BLEND)
-
-    # add a light to the scene
-    def add_light(self, light, layer=0):
-        self.light_processor.lights[layer].append(light)
 
     # texture linking functions
     def link_texture(self, texture_name, texture):
@@ -231,4 +176,3 @@ class Renderer(RegistryItem):
 
     def quit(self):
         self.render_texture.release()
-        self.normal_texture.release()
