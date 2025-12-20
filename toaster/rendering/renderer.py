@@ -8,6 +8,7 @@ from toaster.rendering.opengl.material import Material
 from toaster.registry.registry_item import RegistryItem
 from tlang import ShaderManager
 
+SHADERS_PATH = "assets/shaders"
 TextureType = Literal['albedo', 'occlusion', 'emissive', 'unlit']
 
 
@@ -70,7 +71,7 @@ class Renderer(RegistryItem):
         self.ctx.enable(mgl.BLEND)
 
         # create the shader manager
-        self.sm = ShaderManager(self.ctx, '330', "assets/shaders", {})
+        self.shader_manager = ShaderManager(self.ctx, '330', SHADERS_PATH, {})
         
         # create the default screen buffer (covers whole screen)
         self.screen_buffer = self.ctx.buffer(data=array('f', [
@@ -85,13 +86,11 @@ class Renderer(RegistryItem):
         self.render_texture = self.create_texture()
         self.link_texture("render_tex", self.render_texture)
         
-        prog = self.sm.get_shader('default').get_program('default')
-        self.default_mat = Material(
-            prog, self.ctx.vertex_array(
-                prog, 
-                [(self.screen_buffer, '2f 2f', 'vert', 'texcoord')], 
-                mode=mgl.TRIANGLE_STRIP
-            )
+        # create the default material for rendering a surf to a texture
+        self.default_mat = self.ctx.vertex_array(
+            self.shader_manager.get_shader('default').get_program('default'), 
+            [(self.screen_buffer, '2f 2f', 'vert', 'texcoord')], 
+            mode=mgl.TRIANGLE_STRIP
         )
         
         # texture types we support
@@ -139,7 +138,7 @@ class Renderer(RegistryItem):
                 self.ctx.screen.use()
                 self.default_mat.program['tex'] = self.texture_id(layer['tex_name'])
                 self.default_mat.program['flip'] = True
-                self.default_mat.surface.render()
+                self.default_mat.render()
                 continue
             
             # use the layers frame buffer
@@ -160,7 +159,7 @@ class Renderer(RegistryItem):
                 
                 # disable flipping
                 self.default_mat.program['flip'] = False
-                self.default_mat.surface.render()
+                self.default_mat.render()
                 
                 # clear the surface
                 layer['unlit_surf'].fill(self.clear_colour)
@@ -172,7 +171,7 @@ class Renderer(RegistryItem):
             self.ctx.screen.use()
             self.default_mat.program['tex'] = self.texture_id(layer['tex_name'])
             self.default_mat.program['flip'] = True
-            self.default_mat.surface.render()
+            self.default_mat.render()
     
     def link_texture(self, texture_name: str, texture: mgl.Texture) -> int:
         texture.use(self._reg_tex_id)
@@ -209,30 +208,6 @@ class Renderer(RegistryItem):
         )
         assert isinstance(buffer.color_attachments[0], mgl.Texture)
         return buffer, buffer.color_attachments[0]
-    
-    def create_program(
-        self, 
-        vert: str = "default_vert", 
-        frag: str = "default_frag"
-    ) -> mgl.Program:
-        return self.ctx.program(
-            vertex_shader=self.registry["assets"].get_shader(vert),
-            fragment_shader=self.registry["assets"].get_shader(frag)
-        )
-    
-    def create_material(
-        self, 
-        vert: str = "default_vert", 
-        frag: str = "default_frag"
-    ) -> Material:
-        program: mgl.Program = self.create_program(vert=vert, frag=frag)
-        return Material(
-            program, self.ctx.vertex_array(
-                program, 
-                [(self.screen_buffer, '2f 2f', 'vert', 'texcoord')], 
-                mode=mgl.TRIANGLE_STRIP
-            )
-        )
     
     def world_to_tangent(self, point: tuple[float, float], layer: int) -> tuple[float, float]:
         converted_point: tuple[float, float] = self.registry['camera'].world_to_camera(layer, point)
