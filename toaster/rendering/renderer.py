@@ -54,21 +54,14 @@ class Renderer(RegistryItem):
         # set the window size and reset colour
         self.window_size = self.registry['window'].size
         self.clear_colour = clear_colour
-        self.view_rect = pygame.Rect(0, 0, *self.render_size)
         
         # calculate the conversion ratios
         self.PIXEL_TO_TANGENT = 2 / max(self.render_size)
         self.WORLD_TO_TANGENT = (1 / self.render_size[0],
                                  1 / self.render_size[1])
         
-        # dict to store the texture ids
-        self._textures = {}
-        self._reg_tex_id = 0
-        
-        # create the context and screen buffer
+        # create the context
         self.ctx = mgl.create_context()
-        
-        # set the blend mode for the context
         self.ctx.enable(mgl.BLEND)
 
         # create the shader manager
@@ -90,19 +83,15 @@ class Renderer(RegistryItem):
         self.lighting = Lighting(self)
         
         # create the default material for rendering a surf to a texture
-        self.default_mat = self.ctx.vertex_array(
-            self.shaders.get_shader('default').get_program('default'), # type: ignore
-            [(self.screen_buffer, '2f 2f', 'vert', 'texCoord')], 
-            mode=mgl.TRIANGLE_STRIP
-        )
-        
+        self.default = self.create_screen_vao(self.shaders.get_shader('default').get_program('default')) # type: ignore
+
         # texture types we support
         self.texture_types = ['albedo', 'occlusion', 'emissive', 'unlit']
         
         # create the layers
         self.layers = []
         for i in range(self.camera.num_layers):
-            tex = self.create_texture(4, 'RGBA')
+            tex = self.create_texture(components=4, swizzle='RGBA')
             buf = self.ctx.framebuffer(color_attachments=[tex])
 
             layer_dict: LayerDict = {
@@ -135,17 +124,16 @@ class Renderer(RegistryItem):
     
     def render(self) -> None:
         self.ctx.screen.clear()
-        self.view_rect.topleft = self.camera.world_to_camera(3, (0, 0))
         
         # ::: RENDER INDIVIDUAL LAYERS
         for layer in reversed(self.layers):
             # only process layer if something is dirty
             if not any(layer['dirty'].values()):
                 self.ctx.screen.use()
-                layer['texture'].use(1)
-                self.default_mat.program['tex'] = 1
-                self.default_mat.program['flip'] = True
-                self.default_mat.render()
+                layer['texture'].use(0)
+                self.default.program['tex'] = 0
+                self.default.program['flip'] = True
+                self.default.render()
                 continue
             
             # use the layers frame buffer
@@ -154,20 +142,23 @@ class Renderer(RegistryItem):
             
             # process lit texture
             if layer['dirty']['albedo'] or layer['dirty']['occlusion'] or layer['dirty']['emissive']:
+                self.lighting.render(layer['albedo_surf'], layer['occlusion_surf'], layer['emissive_surf'])
+                layer['occlusion_surf'].fill(self.clear_colour)
                 layer['dirty']['albedo'] = layer['dirty']['occlusion'] = layer['dirty']['emissive'] = False
             
             # process unlit texture
             if layer['dirty']['unlit']:
                 # write the unlit surface to the render_texture
+                layer['buffer'].use()
                 self.render_texture.write(layer['unlit_surf'].get_view('1'))
-                self.render_texture.use(1)
+                self.render_texture.use(0)
                 
                 # set the texture of the program
-                self.default_mat.program['tex'] = 1
+                self.default.program['tex'] = 0
                 
                 # disable flipping
-                self.default_mat.program['flip'] = False
-                self.default_mat.render()
+                self.default.program['flip'] = False
+                self.default.render()
                 
                 # clear the surface
                 layer['unlit_surf'].fill(self.clear_colour)
@@ -177,16 +168,30 @@ class Renderer(RegistryItem):
             
             # ::: RENDER TO SCREEN
             self.ctx.screen.use()
-            layer['texture'].use(1)
-            self.default_mat.program['tex'] = 1
-            self.default_mat.program['flip'] = True
-            self.default_mat.render()
+            layer['texture'].use(0)
+            self.default.program['tex'] = 0
+            self.default.program['flip'] = True
+            self.default.render()
+            
+            # self.lighting.dist_buf.color_attachments[0].use(0)
+            self.lighting.jump_dbuf.current.tex.use(0)
+            self.default.program['tex'] = 0
+            self.default.program['flip'] = True
+            self.default.render()
     
+    def create_screen_vao(
+        self, program: mgl.Program
+    ) -> mgl.VertexArray:
+        return self.ctx.vertex_array(
+            program, [(self.screen_buffer, '2f 2f', 'vert', 'texCoord')], 
+            mode=mgl.TRIANGLE_STRIP
+        ) 
+
     def create_texture(
         self, 
+        size: tuple[int, int] | None = None,
         components: int = 4, 
         swizzle: str = 'BGRA', 
-        size: tuple[int, int] | None = None,
         filter: tuple[int, int] = (mgl.NEAREST, mgl.NEAREST),
         repeat: tuple[bool, bool] = (False, False)
     ) -> mgl.Texture:

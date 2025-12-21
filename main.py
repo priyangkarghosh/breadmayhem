@@ -56,7 +56,7 @@ while 1:
     for i, test_rect in enumerate(tests):
         if test_rect.rect.top > 500:
             test_rect.transform.position = [random.randint(16, 450), random.randint(-150, -100)]
-        reg["renderer"].layers[1]['unlit_surf'].fill(test_colours[i], (*reg["camera"].world_to_camera(1, test_rect.rect.topleft), *test_rect.rect.size))
+        reg["renderer"].layers[1]['occlusion_surf'].fill(test_colours[i], (*reg["camera"].world_to_camera(1, test_rect.rect.topleft), *test_rect.rect.size))
         avg[0] += test_rect.transform.position[0]
         avg[1] += test_rect.transform.position[1]
 
@@ -65,6 +65,7 @@ while 1:
 
     reg["renderer"].layers[1]['unlit_surf'].blit(reg['maps'].current_map.map_surf, reg["camera"].world_to_camera(1, (0, 0)))
     reg.renderer.mark_dirty(1, 'unlit')
+    reg.renderer.mark_dirty(1, 'albedo')
     reg["renderer"].render()
 
     print(reg["window"].fps)
