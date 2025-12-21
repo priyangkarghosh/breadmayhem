@@ -1,6 +1,7 @@
 [program('screen_uv', vert='default_vert', frag='screen_uv')]
 [program('jump_flood', vert='default_vert', frag='jump_flood')]
 [program('distance_field', vert='default_vert', frag='distance_field')]
+[program('cascades', vert='default_vert', frag='cascades')]
 
 [shader('vert')]
 [resourceblock(
@@ -15,13 +16,13 @@ void default_vert() {
 
 [shader('frag')]
 [resourceblock(
-    uniform sampler2D tex;
+    uniform sampler2D _tex;
 
     in vec2 v_uv;
     out vec4 fragColour;
 )]
 void screen_uv() {
-    vec4 texColour = texture(tex, v_uv);
+    vec4 texColour = texture(_tex, v_uv);
     if (any(greaterThan(texColour.rgb, vec3(0.0)))) 
         fragColour = vec4(v_uv.x * texColour.a, v_uv.y * texColour.a, 0.0, 1.0);
     else fragColour = vec4(0.0, 0.0, 0.0, 1.0);
@@ -29,8 +30,8 @@ void screen_uv() {
 
 [shader('frag')]
 [resourceblock(
-    uniform sampler2D tex;
-    uniform int stepSize;
+    uniform sampler2D _tex;
+    uniform int _stepSize;
 
     in vec2 v_uv;
     out vec4 fragColour;
@@ -42,8 +43,8 @@ void jump_flood() {
     ivec2 centerPx = ivec2(gl_FragCoord.xy);
     for (int dy = -1; dy <= 1; ++dy) {
         for (int dx = -1; dx <= 1; ++dx) {
-            ivec2 samplePx = centerPx + ivec2(dx * stepSize, dy * stepSize);
-            vec2 seedUV = texelFetch(tex, samplePx, 0).xy;            
+            ivec2 samplePx = centerPx + ivec2(dx * _stepSize, dy * _stepSize);
+            vec2 seedUV = texelFetch(_tex, samplePx, 0).xy;            
             if (seedUV == vec2(0.0)) continue;
             
             vec2 offset = seedUV - v_uv;
@@ -61,12 +62,61 @@ void jump_flood() {
 
 [shader('frag')]
 [resourceblock(
-    uniform sampler2D tex;
+    uniform sampler2D _tex;
 
     in vec2 v_uv;
     out vec4 fragColour;
 )]
 void distance_field() {
-    vec2 uv = texelFetch(tex, ivec2(gl_FragCoord.xy), 0).xy;
+    vec2 uv = texelFetch(_tex, ivec2(gl_FragCoord.xy), 0).xy;
     fragColour = vec4(distance(v_uv, uv), 0.0, 0.0, 1.0);
+}
+
+const float TAU = 6.28318530718;
+const float EPSILON = 1e-3;
+const int MAX_STEPS = 128;
+
+[link('cascades')]
+vec4 raymarch(vec2 origin, vec2 delta, float range) {
+    float t = 0, dd = 0;
+    for (int i = 0; i < MAX_STEPS && t <= range; i++) {
+        vec2 ray = origin + delta * t;
+        if (ray.x < 0.0 || ray.y < 0.0 || ray.x > 1.0 || ray.y > 1.0)
+            break;
+
+        t += dd = texture(_distanceTex, ray).r;
+        if (dd >= EPSILON) continue;
+
+        vec3 emissive = texture(_emissiveTex, ray).rgb;
+        if (dot(emissive, emissive) > 0.0) return vec4(emissive, 1.0);
+        else return vec4(texture(_albedoTex, ray).rgb, 1.0);
+    }
+    return vec4(0.0, 0.0, 0.0, 0.0);
+}
+
+[shader('frag')]
+[resourceblock(
+    uniform sampler2D _tex;
+    uniform sampler2D _albedoTex;
+    uniform sampler2D _emissiveTex;
+    uniform sampler2D _distanceTex;
+
+    uniform vec2 _cascadeResolution;
+    uniform int _cascadeCount;
+    uniform int _cascadeIndex;
+    uniform float _cascadeInterval;
+
+    in vec2 v_uv;
+    out vec4 fragColour;
+)]
+void cascades() {
+    int probeCount = 1 << _cascadeIndex; // in one dim
+    vec2 probeSpacing = _cascadeResolution / probeCount;
+
+    vec2 probeIndex2D = floor(gl_FragCoord.xy / probeSpacing);
+    int probeIndex = probeIndex2D.x + probeIndex2D.y * probeCount;
+
+    // calculate ray origin + dir
+    vec2 rayIndex2D = mod(gl_FragCoord.xy, probeCount);
+    vec2 rayOrigin = (rayIndex2D + 0.5) * probeCount;
 }

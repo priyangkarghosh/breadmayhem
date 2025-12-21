@@ -131,8 +131,8 @@ class Renderer(RegistryItem):
             if not any(layer['dirty'].values()):
                 self.ctx.screen.use()
                 layer['texture'].use(0)
-                self.default.program['tex'] = 0
-                self.default.program['flip'] = True
+                self.default.program['_tex'] = 0
+                self.default.program['_flip'] = True
                 self.default.render()
                 continue
             
@@ -154,10 +154,10 @@ class Renderer(RegistryItem):
                 self.render_texture.use(0)
                 
                 # set the texture of the program
-                self.default.program['tex'] = 0
+                self.default.program['_tex'] = 0
                 
                 # disable flipping
-                self.default.program['flip'] = False
+                self.default.program['_flip'] = False
                 self.default.render()
                 
                 # clear the surface
@@ -169,14 +169,17 @@ class Renderer(RegistryItem):
             # ::: RENDER TO SCREEN
             self.ctx.screen.use()
             layer['texture'].use(0)
-            self.default.program['tex'] = 0
-            self.default.program['flip'] = True
+            self.default.program['_tex'] = 0
+            self.default.program['_flip'] = True
             self.default.render()
             
             # self.lighting.dist_buf.color_attachments[0].use(0)
-            self.lighting.jump_dbuf.current.tex.use(0)
-            self.default.program['tex'] = 0
-            self.default.program['flip'] = True
+            # self.lighting.jump_dbuf.current.tex.use(0)
+            # self.lighting.emissive_tex.use(0)
+            # self.lighting.albedo_tex.use(0)
+            self.lighting.gi_dbuf.next.tex.use(0)
+            self.default.program['_tex'] = 0
+            self.default.program['_flip'] = False
             self.default.render()
     
     def create_screen_vao(
