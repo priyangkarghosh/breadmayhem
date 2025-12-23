@@ -120,7 +120,7 @@ class Lighting:
         self.cascades.program['_cascadeInterval'] = 80  # adjust this value!
         self.cascades.program['_cascadeCount'] = self.cascade_count
 
-        for i in range(0, 2):
+        for i in range(2, -1, -1):
             self.cascades.program['_cascadeIndex'] = i
 
             #self.gi_dbuf.current.buf.clear(alpha=1)
