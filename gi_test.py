@@ -16,8 +16,8 @@ from toaster.registry.registry import Registry
 from toaster.physics.physics_rect import DYNAMIC
 
 # set the sizes
-render_size = (600, 480)
-window_size = (1200, 960)
+render_size = (1600, 900)
+window_size = (1600, 900)
 Window(flags=HWACCEL, fps_cap=65, size=window_size)
 
 # initialize pygame
@@ -40,11 +40,11 @@ while 1:
     # pygame.draw.rect(reg["renderer"].layers[0]['occlusion_surf'], (255, 255, 255), (300 - 25, 240 - 25, 50, 50))
     # pygame.draw.rect(reg["renderer"].layers[0]['emissive_surf'], (255, 255, 255), (300 - 25, 240 - 25, 50, 50))
 
-    pygame.draw.circle(reg["renderer"].layers[0]['occlusion_surf'], (255, 255, 255), (300, 240), 12)
-    pygame.draw.circle(reg["renderer"].layers[0]['emissive_surf'], (255, 255, 255), (300, 240), 12)
+    pygame.draw.circle(reg["renderer"].layers[0]['occlusion_surf'], (255, 255, 255), (384, 384), 5)
+    pygame.draw.circle(reg["renderer"].layers[0]['emissive_surf'], (255, 255, 255), (384, 384), 5)
 
-    #pygame.draw.circle(reg["renderer"].layers[0]['occlusion_surf'], (255, 255, 255), (25, 240), 15)
-    #pygame.draw.circle(reg["renderer"].layers[0]['albedo_surf'], (255, 255, 255), (25, 240), 15)
+    # pygame.draw.circle(reg["renderer"].layers[0]['occlusion_surf'], (255, 255, 255), (125, 240), 5)
+    # pygame.draw.circle(reg["renderer"].layers[0]['albedo_surf'], (255, 255, 255), (125, 240), 5)
     # mp = list(reg.inputs.mouse_pos)
     # mp[0] *= 0.5; mp[1] *= 0.5
     # reg["renderer"].layers[0]['emissive_surf'].fill((255, 255, 255), (mp[0], mp[1], 5, 5))

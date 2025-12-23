@@ -62,7 +62,7 @@ class Renderer(RegistryItem):
         
         # create the context
         self.ctx = mgl.create_context()
-        self.ctx.enable(mgl.BLEND)
+        #self.ctx.enable(mgl.BLEND)
 
         # create the shader manager
         self.shaders = ShaderManager(self.ctx, '330 core', SHADERS_PATH, {})
@@ -173,11 +173,11 @@ class Renderer(RegistryItem):
             self.default.program['_flip'] = True
             self.default.render()
             
-            self.lighting.dist_buf.color_attachments[0].use(0)
+            # self.lighting.dist_buf.color_attachments[0].use(0)
             # self.lighting.jump_dbuf.current.tex.use(0)
             # self.lighting.emissive_tex.use(0)
             # self.lighting.albedo_tex.use(0)
-            # self.lighting.gi_dbuf.next.tex.use(0)
+            self.lighting.gi_dbuf.next.tex.use(0)
             self.default.program['_tex'] = 0
             self.default.program['_flip'] = False
             self.default.render()

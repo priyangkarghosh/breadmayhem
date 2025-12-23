@@ -14,12 +14,14 @@ class Lighting:
         self.renderer = renderer
 
         # gi properties
-        self.ray_range: float = 2.0
-        self.cascade_count: int = 6
-        self.cascade_resolution = (
-            int(self.renderer.render_size[0] / 4),
-            int(self.renderer.render_size[1] / 4)
-        )
+        self.cascade_count: int = 5
+        self.cascade_linear: int = 1
+        self.cascade_interval: float = 2
+        # self.cascade_resolution = (
+        #     int(self.renderer.render_size[0] / self.cascade_linear),
+        #     int(self.renderer.render_size[1] / self.cascade_linear)
+        # )
+        self.cascade_resolution = self.renderer.render_size
 
         # get lighting shader
         lighting_sh = renderer.shaders.get_shader('lighting')
@@ -112,15 +114,19 @@ class Lighting:
         self.cascades.program['_emissiveTex'] = 2
 
         self.dist_tex.use(3)
-        self.cascades.program['_distanceTex'] = 3
+        #self.cascades.program['_distanceTex'] = 3
+
+        self.jump_dbuf.current.tex.write(occlusion.get_view('1'))
+        self.jump_dbuf.current.tex.use(4)
+        self.cascades.program['_occlusionTex'] = 4
 
         self.cascades.program['_renderResolution'] = self.renderer.render_size
         self.cascades.program['_cascadeResolution'] = self.cascade_resolution
-        self.cascades.program['_cascadeLinear'] = 4  # adjust this value!
-        self.cascades.program['_cascadeInterval'] = 80  # adjust this value!
+        self.cascades.program['_cascadeLinear'] = self.cascade_linear
+        self.cascades.program['_cascadeInterval'] = self.cascade_interval
         self.cascades.program['_cascadeCount'] = self.cascade_count
 
-        for i in range(2, -1, -1):
+        for i in range(self.cascade_count - 1, -1, -1):
             self.cascades.program['_cascadeIndex'] = i
 
             #self.gi_dbuf.current.buf.clear(alpha=1)
@@ -129,4 +135,13 @@ class Lighting:
             self.cascades.render()
             self.gi_dbuf.flip()
             #break
+        # for i in range(1, 2):
+        #     self.cascades.program['_cascadeIndex'] = i
+
+        #     #self.gi_dbuf.current.buf.clear(alpha=1)
+        #     self.gi_dbuf.current.buf.use()
+        #     self.gi_dbuf.next.tex.use(0)
+        #     self.cascades.render()
+        #     self.gi_dbuf.flip()
+        #     #break
             
