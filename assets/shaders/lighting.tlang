@@ -75,31 +75,8 @@ void distance_field() {
 const float TAU = 6.28318530718;
 const float EPSILON = 1e-3;
 
-struct probe_info { float angular; vec2 linear, size, probe; float index, offset, range, scale; };
-
-[link('cascades')]
-probe_info generate_probe() {
-    // probe properties
-    float angular = pow(2.0, _cascadeIndex);
-    vec2 linear = vec2(_cascadeLinear * angular);
-    vec2 size = floor(_cascadeResolution / angular);
-
-    // probe index
-    vec2 probe = mod(floor(gl_FragCoord.xy), size);
-    vec2 rayCoord = floor(v_uv * angular);
-    float ray = rayCoord.x + (angular * rayCoord.y);
-
-    // ray ranges
-    float offset = _cascadeInterval * ((1.0 - pow(4.0, _cascadeIndex)) / (1.0 - 4.0));
-    float range = _cascadeInterval * pow(4.0, _cascadeIndex);
-    range += length(vec2(_cascadeLinear * pow(2.0, _cascadeIndex + 1.0)));
-
-    // scaling factor
-    float scale = length(_renderResolution);
-    return probe_info(
-        angular * angular, linear, size, probe, ray, offset, range, scale
-    );
-}
+#define SRGB(c) pow(c.rgb, vec3(2.2))
+#define LINEAR(c) pow(c.rgb, vec3(1.0 / 2.2))
 
 // [link('cascades')]
 // vec4 raymarch(vec2 origin, float theta, probe_info probe) {
@@ -119,8 +96,8 @@ probe_info generate_probe() {
 //             if (length(emission) > 0.0) 
 //                 return vec4(emission, 0.0);
 //             else {
-//                 vec3 baseColor = texture(_albedoTex, ray).rgb;
-//                 return vec4(baseColor, 0.0);
+//                 vec3 albedo = texture(_albedoTex, ray).rgb;
+//                 return vec4(albedo, 0.0);
 //             }
 //         }
 // 	}
@@ -128,29 +105,28 @@ probe_info generate_probe() {
 // }
 
 [link('cascades')]
-vec4 raymarch(vec2 origin, float theta, probe_info probe) {
+vec4 raymarch(vec2 origin, vec2 delta, float range) {
     vec2 texel = 1.0 / _renderResolution;
-    vec2 delta = vec2(cos(theta), -sin(theta));
+
+    vec2 ray = origin * texel;
     vec2 step = delta * texel;
-    
-    vec2 ray = (origin + (delta * probe.offset)) * texel;
-    for(float i = 0.0; i < probe.range; i++) {
+    for(float i = 0.0; i < range; i++) {
         ray += step;
         
         // Check bounds
         if (any(lessThan(ray, vec2(0.0))) || any(greaterThan(ray, vec2(1.0)))) 
             break;
         
-        // Check if we hit geometry (alpha > threshold)
+        // check if we hit geometry (alpha > threshold)
         float alpha = texture(_occlusionTex, ray).a;
         if (alpha > 0.0) {
-            // Hit something, check for emission
+            // hit something, check for emission
             vec3 emission = texture(_emissiveTex, ray).rgb;
             if (length(emission) > 0.0) 
-                return vec4(emission, 0.0);
+                return vec4(SRGB(emission), 0.0);
             else {
-                vec3 baseColor = texture(_albedoTex, ray).rgb;
-                return vec4(baseColor, 0.0);
+                vec3 albedo = texture(_albedoTex, ray).rgb;
+                return vec4(SRGB(albedo), 0.0);
             }
         }
     }
@@ -159,19 +135,16 @@ vec4 raymarch(vec2 origin, float theta, probe_info probe) {
 }
 
 [link('cascades')]
-vec4 merge(vec4 rinfo, float index, probe_info pinfo) {
-	if (rinfo.a == 0.0 || _cascadeIndex >= _cascadeCount - 1.0)
-		return vec4(rinfo.rgb, 1 - rinfo.a);
+vec4 merge(vec4 radiance, float base, vec2 extent, vec2 probe) {
+	if (radiance.a == 0.0 || _cascadeIndex >= _cascadeCount - 1.0)
+		return vec4(radiance.rgb, 1 - radiance.a);
 	
-	float angularN1 = pow(2.0, _cascadeIndex + 1.0);
-	vec2 sizeN1 = pinfo.size * 0.5;
-	vec2 probeN1 = vec2(mod(index, angularN1), floor(index / angularN1)) * sizeN1;
-	vec2 interpUVN1 = (pinfo.probe * 0.5) + 0.25;
-	vec2 clampedUVN1 = max(vec2(1.0), min(interpUVN1, sizeN1 - 1.0));
-	vec2 probeUVN1 = (probeN1 + clampedUVN1) * (1.0 / _cascadeResolution);
-	vec4 interpolated = texture(_tex, probeUVN1);
-    //return rinfo + interpolated;
-	return vec4(rinfo.rgb + interpolated.rgb * rinfo.a, rinfo.a * interpolated.a);
+	float angularN1 = pow(2.0, floor(_cascadeIndex + 1.0));
+	vec2 extentN1 = floor(_cascadeResolution / angularN1);
+	vec2 interpN1 = vec2(mod(base, angularN1), floor(base / angularN1)) * extentN1;
+    interpN1 += clamp((probe * 0.5) + 0.25, vec2(0.5), extentN1 - 0.5);
+	vec4 mergeRadiance = texture(_tex, interpN1 * (1.0 / _cascadeResolution));
+	return vec4(radiance.rgb + mergeRadiance.rgb * radiance.a, radiance.a * mergeRadiance.a);
 }
 
 [shader('frag')]
@@ -194,24 +167,36 @@ vec4 merge(vec4 rinfo, float index, probe_info pinfo) {
     out vec4 fragColour;
 )]
 void cascades() {
-    probe_info pinfo = generate_probe();
+    float sqrtAngular = floor(pow(2, _cascadeIndex));
+    float angular = floor(sqrtAngular * sqrtAngular * 4.0);
+
+    //vec2 coord = floor(gl_FragCoord.xy);
+    vec2 coord = floor(vec2(v_uv.x, 1 - v_uv.y) * _cascadeResolution);
+    vec2 extent = floor(_cascadeResolution / sqrtAngular);
+    vec4 probe = vec4(mod(coord, extent), floor(coord / extent));
+    vec2 linear = vec2(_cascadeLinear * pow(2.0, _cascadeIndex));
+
+    float offset = _cascadeInterval * ((1.0 - pow(4.0, _cascadeIndex)) / (1.0 - 4.0));
+    float range = _cascadeInterval * pow(4.0, _cascadeIndex);
+    range += length(linear * 2.0);
 
     // screen space ray origin
-    vec2 origin = (pinfo.probe + 0.5) * pinfo.linear;
-    float angleStep = TAU / (pinfo.angular * 4.0);
-    //fragColour = vec4(origin / _renderResolution, 0.0, 1.0);
+    vec2 origin = (probe.xy + 0.5) * linear;
+    float base = (probe.z + (probe.w * sqrtAngular)) * 4.0;
 
-    fragColour = vec4(0);
-    float base = pinfo.index * 4;
-	for (float i = 0.0; i < 4.0; i++) {
+    vec4 acc = vec4(0);
+	for (float i = 0; i < 4; i++) {
         float index = base + i;
-		float theta = (index + 0.5) * angleStep;	
-		vec4 radiance = raymarch(origin, theta, pinfo);
-		fragColour += merge(radiance, index, pinfo) * 0.25;
+		float theta = (index + 0.5) * (TAU / angular);	
+        vec2 delta = vec2(cos(theta), -sin(theta));
+        vec2 ray = origin + (delta * offset);
+		vec4 radiance = raymarch(ray, delta, range);
+		acc += merge(radiance, index, extent, probe.xy) * 0.25;
 	}
 	
-    // if (_cascadeIndex == 0.0)
-	// 	fragColour = vec4(pow(fragColour.rgb, vec3(1.0 / 2.2)), 1.0);
+    if (_cascadeIndex == 0.0)
+		acc = vec4(LINEAR(acc.rgb), 1.0);
+    fragColour = acc;
     //fragColour += vec4(v_uv * EPSILON + ((pinfo.probe + 0.5) * pow(2, _cascadeIndex) / _renderResolution), 0.0, 1.0);
-    //fragColour += vec4(v_uv * EPSILON + ((pinfo.probe + 0.5) * pow(2, _cascadeIndex) / _renderResolution), 0.0, 1.0);
+    //fragColour += vec4(v_uv * EPSILON, 0.0, 1.0);
 }

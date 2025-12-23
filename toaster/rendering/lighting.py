@@ -14,14 +14,18 @@ class Lighting:
         self.renderer = renderer
 
         # gi properties
-        self.cascade_count: int = 5
+        self.cascade_count: int = 6
         self.cascade_linear: int = 1
-        self.cascade_interval: float = 2
+        self.cascade_interval: float = 1
         # self.cascade_resolution = (
         #     int(self.renderer.render_size[0] / self.cascade_linear),
         #     int(self.renderer.render_size[1] / self.cascade_linear)
         # )
-        self.cascade_resolution = self.renderer.render_size
+        cc = 2 ** self.cascade_count
+        self.cascade_resolution = (
+            int(ceil((self.renderer.render_size[0] / self.cascade_linear) / float(cc)) * cc),
+            int(ceil((self.renderer.render_size[1] / self.cascade_linear) / float(cc)) * cc)
+        )
 
         # get lighting shader
         lighting_sh = renderer.shaders.get_shader('lighting')
@@ -44,7 +48,7 @@ class Lighting:
             renderer, 
             size=self.cascade_resolution,
             swizzle='RGBA', 
-            #filter=(mgl.LINEAR, mgl.LINEAR)
+            filter=(mgl.LINEAR, mgl.LINEAR)
         )
     
     def render(
