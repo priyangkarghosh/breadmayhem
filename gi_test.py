@@ -37,18 +37,26 @@ while 1:
     reg["window"].update()
     reg["camera"].update()
 
-    mp = list(reg.inputs.mouse_pos)
-    mp[0] *= 0.5; mp[1] *= 0.5
-    reg["renderer"].layers[0]['emissive_surf'].fill((255, 255, 255), (mp[0], mp[1], 5, 5))
+    # pygame.draw.rect(reg["renderer"].layers[0]['occlusion_surf'], (255, 255, 255), (300 - 25, 240 - 25, 50, 50))
+    # pygame.draw.rect(reg["renderer"].layers[0]['emissive_surf'], (255, 255, 255), (300 - 25, 240 - 25, 50, 50))
 
-    reg["renderer"].layers[0]['albedo_surf'].fill((255, 255, 255), (70, 90, 25, 25))
-    reg["renderer"].layers[0]['albedo_surf'].fill((255, 255, 255), (400, 300, 25, 25))
-    reg["renderer"].layers[0]['albedo_surf'].fill((255, 255, 255), (50, 2, 5, 5))
-    reg["renderer"].layers[0]['albedo_surf'].fill((255, 255, 255), (300, 420, 15, 25))
+    pygame.draw.circle(reg["renderer"].layers[0]['occlusion_surf'], (255, 255, 255), (300, 240), 12)
+    pygame.draw.circle(reg["renderer"].layers[0]['emissive_surf'], (255, 255, 255), (300, 240), 12)
 
-    reg["renderer"].layers[0]['occlusion_surf'].fill((255, 255, 255), (70, 90, 25, 25))
-    reg["renderer"].layers[0]['occlusion_surf'].fill((255, 255, 255), (400, 300, 25, 25))
-    reg["renderer"].layers[0]['occlusion_surf'].fill((255, 255, 255), (50, 2, 5, 5))
-    reg["renderer"].layers[0]['occlusion_surf'].fill((255, 255, 255), (300, 420, 15, 25))
+    #pygame.draw.circle(reg["renderer"].layers[0]['occlusion_surf'], (255, 255, 255), (25, 240), 15)
+    #pygame.draw.circle(reg["renderer"].layers[0]['albedo_surf'], (255, 255, 255), (25, 240), 15)
+    # mp = list(reg.inputs.mouse_pos)
+    # mp[0] *= 0.5; mp[1] *= 0.5
+    # reg["renderer"].layers[0]['emissive_surf'].fill((255, 255, 255), (mp[0], mp[1], 5, 5))
+
+    # reg["renderer"].layers[0]['albedo_surf'].fill((255, 255, 255), (70, 90, 25, 25))
+    # reg["renderer"].layers[0]['albedo_surf'].fill((255, 255, 255), (400, 300, 25, 25))
+    # reg["renderer"].layers[0]['albedo_surf'].fill((255, 255, 255), (50, 2, 5, 5))
+    # reg["renderer"].layers[0]['albedo_surf'].fill((255, 255, 255), (300, 420, 15, 25))
+
+    # reg["renderer"].layers[0]['occlusion_surf'].fill((255, 255, 255), (70, 90, 25, 25))
+    # reg["renderer"].layers[0]['occlusion_surf'].fill((255, 255, 255), (400, 300, 25, 25))
+    # reg["renderer"].layers[0]['occlusion_surf'].fill((255, 255, 255), (50, 2, 5, 5))
+    # reg["renderer"].layers[0]['occlusion_surf'].fill((255, 255, 255), (300, 420, 15, 25))
     reg.renderer.mark_dirty(0, 'albedo')
     reg["renderer"].render()

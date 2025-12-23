@@ -173,7 +173,7 @@ class Renderer(RegistryItem):
             self.default.program['_flip'] = True
             self.default.render()
             
-            # self.lighting.dist_buf.color_attachments[0].use(0)
+            #self.lighting.dist_buf.color_attachments[0].use(0)
             # self.lighting.jump_dbuf.current.tex.use(0)
             # self.lighting.emissive_tex.use(0)
             # self.lighting.albedo_tex.use(0)

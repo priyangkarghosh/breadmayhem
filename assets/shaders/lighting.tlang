@@ -2,6 +2,7 @@
 [program('jump_flood', vert='default_vert', frag='jump_flood')]
 [program('distance_field', vert='default_vert', frag='distance_field')]
 [program('cascades', vert='default_vert', frag='cascades')]
+[program('debug', vert='default_vert', frag='debug')]
 
 [shader('vert')]
 [resourceblock(
@@ -31,7 +32,7 @@ void screen_uv() {
 [shader('frag')]
 [resourceblock(
     uniform sampler2D _tex;
-    uniform int _stepSize;
+    uniform ivec2 _stepSize;
 
     in vec2 v_uv;
     out vec4 fragColour;
@@ -43,7 +44,7 @@ void jump_flood() {
     ivec2 centerPx = ivec2(gl_FragCoord.xy);
     for (int dy = -1; dy <= 1; ++dy) {
         for (int dx = -1; dx <= 1; ++dx) {
-            ivec2 samplePx = centerPx + ivec2(dx * _stepSize, dy * _stepSize);
+            ivec2 samplePx = centerPx + ivec2(dx, dy) * _stepSize;
             vec2 seedUV = texelFetch(_tex, samplePx, 0).xy;            
             if (seedUV == vec2(0.0)) continue;
             
@@ -74,24 +75,73 @@ void distance_field() {
 
 const float TAU = 6.28318530718;
 const float EPSILON = 1e-3;
-const int MAX_STEPS = 128;
+
+struct probe_info { float angular; vec2 linear, size, probe; float index, offset, range, scale; };
 
 [link('cascades')]
-vec4 raymarch(vec2 origin, vec2 delta, float range) {
-    float t = 0, dd = 0;
-    for (int i = 0; i < MAX_STEPS && t <= range; i++) {
-        vec2 ray = origin + delta * t;
-        if (ray.x < 0.0 || ray.y < 0.0 || ray.x > 1.0 || ray.y > 1.0)
-            break;
+probe_info generate_probe() {
+    // probe properties
+    float angular = pow(2.0, _cascadeIndex);
+    vec2 linear = vec2(_cascadeLinear * angular);
+    vec2 size = _cascadeResolution / angular;
 
-        t += dd = texture(_distanceTex, ray).r;
-        if (dd >= EPSILON) continue;
+    // probe index
+    vec2 probe = mod(floor(v_uv * _cascadeResolution), size);
+    vec2 rayCoord = floor(v_uv * angular);
+    float ray = rayCoord.x + (angular * rayCoord.y);
 
-        vec3 emissive = texture(_emissiveTex, ray).rgb;
-        if (dot(emissive, emissive) > 0.0) return vec4(emissive, 1.0);
-        else return vec4(texture(_albedoTex, ray).rgb, 1.0);
-    }
-    return vec4(0.0, 0.0, 0.0, 0.0);
+    // ray ranges
+    float offset = (_cascadeInterval * (1.0 - pow(4.0, _cascadeIndex))) / (1.0 - 4.0);
+    float range = _cascadeInterval * pow(4.0, _cascadeIndex);
+    range += length(vec2(_cascadeLinear * pow(2.0, _cascadeIndex + 1.0)));
+
+    // scaling factor
+    float scale = length(_renderResolution);
+    return probe_info(
+        angular * angular, linear, size, probe, ray, offset, range, scale
+    );
+}
+
+[link('cascades')]
+vec4 raymarch(vec2 origin, float theta, probe_info probe) {
+    vec2 texel = 1.0 / _renderResolution;
+    vec2 delta = vec2(cos(theta), -sin(theta));
+
+    vec2 ray = (origin + (delta * probe.offset)) * texel;
+	for(float i = 0.0, df = 0.0, rd = 0.0; i < probe.range; i++) {
+		df = texture(_distanceTex, ray).r;
+        rd += df * probe.scale;
+        ray += (delta * df * probe.scale * texel);
+
+		if (rd >= probe.range || floor(ray) != vec2(0.0)) break;
+        if (df <= EPSILON && rd <= EPSILON && _cascadeIndex != 0.0) return vec4(0.0);
+        if (df < EPSILON) {
+            vec3 emission = texture(_emissiveTex, ray).rgb;
+            if (length(emission) > 0.0) 
+                return vec4(emission, 0.0);
+            else {
+                vec3 baseColor = texture(_albedoTex, ray).rgb;
+                return vec4(baseColor, 0.0);
+            }
+        }
+	}
+	return vec4(0.0, 0.0, 0.0, 1.0);
+}
+
+[link('cascades')]
+vec4 merge(vec4 rinfo, float index, probe_info pinfo) {
+	if (rinfo.a == 0.0 || _cascadeIndex >= _cascadeCount - 1.0)
+		return vec4(rinfo.rgb, 1 - rinfo.a);
+	
+	float angularN1 = pow(2.0, _cascadeIndex + 1.0);
+	vec2 sizeN1 = pinfo.size * 0.5;
+	vec2 probeN1 = vec2(mod(index, angularN1), floor(index / angularN1)) * sizeN1;
+	vec2 interpUVN1 = (pinfo.probe * 0.5) + 0.25;
+	vec2 clampedUVN1 = max(vec2(1.0), min(interpUVN1, sizeN1 - 1.0));
+	vec2 probeUVN1 = (probeN1 + clampedUVN1) * (1.0 / _cascadeResolution);
+	vec4 interpolated = texture(_tex, probeUVN1);
+    //return rinfo + interpolated;
+	return vec4(rinfo.rgb + interpolated.rgb * rinfo.a, rinfo.a * interpolated.a);
 }
 
 [shader('frag')]
@@ -101,22 +151,30 @@ vec4 raymarch(vec2 origin, vec2 delta, float range) {
     uniform sampler2D _emissiveTex;
     uniform sampler2D _distanceTex;
 
+    uniform vec2 _renderResolution;
     uniform vec2 _cascadeResolution;
-    uniform int _cascadeCount;
+    
     uniform int _cascadeIndex;
-    uniform float _cascadeInterval;
+    uniform int _cascadeCount;
+    uniform float _cascadeLinear; // probe density of cascade0 
+    uniform float _cascadeInterval; // ray interval length of cascade0
 
     in vec2 v_uv;
     out vec4 fragColour;
 )]
 void cascades() {
-    int probeCount = 1 << _cascadeIndex; // in one dim
-    vec2 probeSpacing = _cascadeResolution / probeCount;
+    probe_info pinfo = generate_probe();
 
-    vec2 probeIndex2D = floor(gl_FragCoord.xy / probeSpacing);
-    int probeIndex = probeIndex2D.x + probeIndex2D.y * probeCount;
-
-    // calculate ray origin + dir
-    vec2 rayIndex2D = mod(gl_FragCoord.xy, probeCount);
-    vec2 rayOrigin = (rayIndex2D + 0.5) * probeCount;
+    // screen space ray origin
+    vec2 origin = (pinfo.probe + 0.5) * pinfo.linear;
+    float angleStep = TAU / (pinfo.angular * 4.0);
+    //fragColour = vec4(origin / _renderResolution, 0.0, 1.0);
+    float base = pinfo.index * 4;
+	for (float i = 0.0; i < 4.0; i++) {
+        float index = base + i;
+		float theta = (index + 0.5) * angleStep;	
+		vec4 radiance = raymarch(origin, theta, pinfo);
+		fragColour += merge(radiance, index, pinfo) * 0.25;
+	}
+    fragColour += vec4(v_uv * EPSILON, 0.0, 0.0);
 }
