@@ -6,8 +6,8 @@
 const float TAU = 6.28318530718;
 const float EPSILON = 1e-3;
 
-#define SRGB(c) pow(c.rgb, vec3(2.2))
-#define LINEAR(c) pow(c.rgb, vec3(1.0 / 2.2))
+#define SRGB(c) pow(c.rgb, vec3(1.0 / 2.2))
+#define LINEAR(c) pow(c.rgb, vec3(2.2))
 
 [shader('vert')]
 [resourceblock(
@@ -143,11 +143,10 @@ void raymarch(vec2 origin, vec2 delta, float range, out vec4 radiance, out vec4 
     transmittance = vec4(1.0);
     for(float i = 0.0; i < range; i++) {
         ray += step;
-        if (any(lessThan(ray, vec2(0.0))) || any(greaterThan(ray, vec2(1.0))))
-            break;
+        if (floor(ray) != vec2(0.0)) break;
         
-        vec3 emiss = texture(_emissiveTex, ray).rgb;
-		vec3 absrp = texture(_albedoTex, ray).rgb;
+        vec3 emiss = LINEAR(texture(_emissiveTex, ray).rgb);
+		vec3 absrp = LINEAR(texture(_albedoTex, ray).rgb);
 		vec3 trans = exp(-absrp);
 		vec3 radnc = (1.0 - trans) * emiss;
 
@@ -155,7 +154,7 @@ void raymarch(vec2 origin, vec2 delta, float range, out vec4 radiance, out vec4 
 		transmittance.rgb *= trans;
     }
 
-    radiance = vec4(SRGB(radiance.rgb), 1.0);
+    radiance = vec4(radiance.rgb, 1.0);
 }
 
 [link('cascades')]
@@ -220,6 +219,6 @@ void cascades() {
 		acc += merge(radiance, transmittance, index, probe.xy) * 0.25;
 	}
 	
-    if (_cascadeIndex == 0.0) acc = vec4(LINEAR(acc.rgb), 1.0);
+    if (_cascadeIndex == 0.0) acc = vec4(SRGB(acc.rgb), 1.0);
     fragColour = acc;
 }

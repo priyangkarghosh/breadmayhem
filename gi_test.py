@@ -50,10 +50,10 @@ while 1:
     #pygame.draw.circle(reg["renderer"].layers[0]['occlusion_surf'], (100, 100, 100), (704, 504), 24)
     pygame.draw.circle(reg["renderer"].layers[0]['albedo_surf'], (255, 255, 255), (1200, 450), 100, 15)
     pygame.draw.rect(reg["renderer"].layers[0]['albedo_surf'], (0, 0, 0), (1100, 412.5, 25, 75))
-    pygame.draw.circle(reg["renderer"].layers[0]['emissive_surf'], (39, 143, 243), (1200, 450), 100, 15)
+    pygame.draw.circle(reg["renderer"].layers[0]['emissive_surf'], (0, 127, 255), (1200, 450), 100, 15)
     pygame.draw.rect(reg["renderer"].layers[0]['emissive_surf'], (0, 0, 0), (1100, 412.5, 25, 75))
 
-    pygame.draw.circle(reg["renderer"].layers[0]['albedo_surf'], (255, 255, 0), (500, 450), 50)
+    pygame.draw.circle(reg["renderer"].layers[0]['albedo_surf'], (0, 255, 0), (500, 450), 50)
 
     reg.renderer.mark_dirty(0, 'albedo')
     reg["renderer"].render()
