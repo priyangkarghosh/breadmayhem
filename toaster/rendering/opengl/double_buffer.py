@@ -12,18 +12,24 @@ class _BufferAccessor:
     def buf(self) -> mgl.Framebuffer:
         if self._is_current: return self._parent._buf1 if self._parent._flipped else self._parent._buf2
         else: return self._parent._buf2 if self._parent._flipped else self._parent._buf1
-    
-    @property
-    def tex(self) -> mgl.Texture:
-        if self._is_current: return self._parent._tex1 if self._parent._flipped else self._parent._tex2 # type: ignore
-        else: return self._parent._tex2 if self._parent._flipped else self._parent._tex1 # type: ignore
+
+    def tex(self, index: int = 0) -> mgl.Texture:
+        if self._is_current: 
+            return (
+                self._parent._buf1.color_attachments[index] if self._parent._flipped 
+                else self._parent._buf2.color_attachments[index]
+            ) # type: ignore
+        else: 
+            return (
+                self._parent._buf2.color_attachments[index] if self._parent._flipped 
+                else self._parent._buf1.color_attachments[index]
+            ) # type: ignore
 
 class DoubleTextureBuffer:
     def __init__(self, buf1: mgl.Framebuffer, buf2: mgl.Framebuffer):
         self._flipped = False
         self._buf1, self._buf2 = buf1, buf2
         self._validate_buffers()
-        self._tex1, self._tex2 = buf1.color_attachments[0], buf2.color_attachments[0]
         
         # Create accessor objects
         self._current = _BufferAccessor(self, is_current=True)
@@ -32,14 +38,6 @@ class DoubleTextureBuffer:
     def _validate_buffers(self):
         if not self._buf1.color_attachments or not self._buf2.color_attachments:
             raise ValueError("Both framebuffers must have at least one color attachment")
-        
-        tex1 = self._buf1.color_attachments[0]
-        tex2 = self._buf2.color_attachments[0]
-        if not isinstance(tex1, mgl.Texture) or not isinstance(tex2, mgl.Texture):
-            raise TypeError("Color attachments must be textures")
-        
-        if tex1.size != tex2.size:
-            raise ValueError(f"Texture sizes must match: {tex1.size} != {tex2.size}")
     
     @property
     def current(self) -> _BufferAccessor:
@@ -48,10 +46,6 @@ class DoubleTextureBuffer:
     @property
     def next(self) -> _BufferAccessor:
         return self._next
-    
-    @property
-    def size(self) -> tuple[int, int]:
-        return self.current.tex.size
     
     def flip(self):
         self._flipped = not self._flipped
@@ -68,14 +62,14 @@ class DoubleTextureBuffer:
     def create(
         cls, 
         renderer: 'Renderer', 
+        attachments: int = 1,
         size: tuple[int, int] | None = None,
         components: int = 4, 
         swizzle: str = 'BGRA', 
         filter: tuple[int, int] = (mgl.NEAREST, mgl.NEAREST),
-        repeat: tuple[bool, bool] = (False, False)
+        repeat: tuple[bool, bool] = (False, False),
+        dtype: str = 'f1'
     ) -> 'DoubleTextureBuffer':
-        tex1 = renderer.create_texture(size, components, swizzle, filter, repeat)
-        tex2 = renderer.create_texture(size, components, swizzle, filter, repeat)
-        buf1 = renderer.ctx.framebuffer(color_attachments=[tex1])
-        buf2 = renderer.ctx.framebuffer(color_attachments=[tex2])
+        buf1 = renderer.ctx.framebuffer(color_attachments=[renderer.create_texture(size, components, swizzle, filter, repeat, dtype) for _ in range(attachments)])
+        buf2 = renderer.ctx.framebuffer(color_attachments=[renderer.create_texture(size, components, swizzle, filter, repeat, dtype) for _ in range(attachments)])
         return cls(buf1, buf2)

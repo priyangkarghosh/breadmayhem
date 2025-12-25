@@ -175,9 +175,9 @@ class Renderer(RegistryItem):
             
             # self.lighting.dist_buf.color_attachments[0].use(0)
             # self.lighting.jump_dbuf.current.tex.use(0)
-            # self.lighting.emissive_tex.use(0)
             # self.lighting.albedo_tex.use(0)
-            self.lighting.gi_dbuf.next.tex.use(0)
+            # self.lighting.emissive_tex.use(0)
+            self.lighting.gi_dbuf.next.tex().use(0)
             self.default.program['_tex'] = 0
             self.default.program['_flip'] = False
             self.default.render()
@@ -196,10 +196,11 @@ class Renderer(RegistryItem):
         components: int = 4, 
         swizzle: str = 'BGRA', 
         filter: tuple[int, int] = (mgl.NEAREST, mgl.NEAREST),
-        repeat: tuple[bool, bool] = (False, False)
+        repeat: tuple[bool, bool] = (False, False),
+        dtype: str = 'f1'
     ) -> mgl.Texture:
         if not size: size = self.render_size
-        texture: mgl.Texture = self.ctx.texture(size, components)
+        texture: mgl.Texture = self.ctx.texture(size, components, dtype=dtype)
         texture.filter = filter
         texture.repeat_x, texture.repeat_y = repeat
         texture.swizzle = swizzle

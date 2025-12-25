@@ -133,14 +133,14 @@ void distance_field() {
 // }
 
 [link('cascades')]
-vec4 raymarch(vec2 origin, vec2 delta, float range) {
+void raymarch(vec2 origin, vec2 delta, float range, out vec4 radiance, out vec4 transmittance) {
     vec2 texel = 1.0 / _renderResolution;
 
     vec2 ray = origin * texel;
     vec2 step = delta * texel;
 
-    vec3 radiance = vec3(0.0);
-    vec3 transmit = vec3(1.0);
+    radiance = vec4(0.0);
+    transmittance = vec4(1.0);
     for(float i = 0.0; i < range; i++) {
         ray += step;
         if (any(lessThan(ray, vec2(0.0))) || any(greaterThan(ray, vec2(1.0))))
@@ -151,25 +151,24 @@ vec4 raymarch(vec2 origin, vec2 delta, float range) {
 		vec3 trans = exp(-absrp);
 		vec3 radnc = (1.0 - trans) * emiss;
 
-		radiance += radnc * transmit;
-		transmit *= trans;
+		radiance.rgb += radnc * transmittance.rgb;
+		transmittance.rgb *= trans;
     }
 
-    float luma = dot(transmit.rgb, vec3(0.2126, 0.7152, 0.0722));
-    return vec4(SRGB(radiance), luma);
+    radiance = vec4(SRGB(radiance.rgb), 1.0);
 }
 
 [link('cascades')]
-vec4 merge(vec4 radiance, float index, vec2 probe) {
-	if (radiance.a == 0.0 || _cascadeIndex >= _cascadeCount - 1.0)
-		return vec4(radiance.rgb, 1 - radiance.a);
+vec4 merge(vec4 radiance, vec4 transmittance, float index, vec2 probe) {
+	if (_cascadeIndex >= _cascadeCount - 1.0)
+		return radiance;
 	
 	float angularN1 = pow(2.0, floor(_cascadeIndex + 1.0));
 	vec2 extentN1 = floor(_cascadeResolution / angularN1);
 	vec2 interpN1 = vec2(mod(index, angularN1), floor(index / angularN1)) * extentN1;
     interpN1 += clamp((probe * 0.5) + 0.25, vec2(0.5), extentN1 - 0.5);
 	vec4 mergeRadiance = texture(_tex, interpN1 * (1.0 / _cascadeResolution));
-	return vec4(radiance.rgb + mergeRadiance.rgb * radiance.a, radiance.a * mergeRadiance.a);
+	return radiance + mergeRadiance * transmittance;
 }
 
 [shader('frag')]
@@ -215,8 +214,10 @@ void cascades() {
 		float theta = (index + 0.5) * (TAU / angular);	
         vec2 delta = vec2(cos(theta), -sin(theta));
         vec2 ray = origin + (delta * offset);
-		vec4 radiance = raymarch(ray, delta, range);
-		acc += merge(radiance, index, probe.xy) * 0.25;
+
+        vec4 radiance, transmittance;
+		raymarch(ray, delta, range, radiance, transmittance);
+		acc += merge(radiance, transmittance, index, probe.xy) * 0.25;
 	}
 	
     if (_cascadeIndex == 0.0) acc = vec4(LINEAR(acc.rgb), 1.0);

@@ -15,7 +15,7 @@ class Lighting:
 
         # gi properties
         self.cascade_count: int = 6
-        self.cascade_linear: int = 3
+        self.cascade_linear: int = 1
         self.cascade_interval: float = 1
 
         # calculate cascade res
@@ -46,7 +46,8 @@ class Lighting:
             renderer, 
             size=self.cascade_resolution,
             swizzle='RGBA', 
-            filter=(mgl.LINEAR, mgl.LINEAR)
+            filter=(mgl.LINEAR, mgl.LINEAR),
+            dtype='f2'
         )
     
     def render(
@@ -109,17 +110,19 @@ class Lighting:
 
         self.albedo_tex.write(albedo.get_view('1'))
         self.albedo_tex.use(1)
+        #self.albedo_tex.build_mipmaps()
         self.cascades.program['_albedoTex'] = 1
 
         self.emissive_tex.write(emissive.get_view('1'))
         self.emissive_tex.use(2)
+        #self.emissive_tex.build_mipmaps()
         self.cascades.program['_emissiveTex'] = 2
 
         self.dist_tex.use(3)
         #self.cascades.program['_distanceTex'] = 3
 
-        self.jump_dbuf.current.tex.write(occlusion.get_view('1'))
-        self.jump_dbuf.current.tex.use(4)
+        self.jump_dbuf.current.tex().write(occlusion.get_view('1'))
+        self.jump_dbuf.current.tex().use(4)
         #self.cascades.program['_occlusionTex'] = 4
 
         self.cascades.program['_renderResolution'] = self.renderer.render_size
@@ -132,7 +135,7 @@ class Lighting:
             self.cascades.program['_cascadeIndex'] = i
 
             self.gi_dbuf.current.buf.use()
-            self.gi_dbuf.next.tex.use(0)
+            self.gi_dbuf.next.tex().use(0)
             self.cascades.render()
             self.gi_dbuf.flip()
             #break
