@@ -33,28 +33,21 @@ Renderer(render_size=render_size)
 # TESTING
 reg = Registry.instance()
 
-while 1:
-    reg["window"].update()
-    reg["camera"].update()
-
-    # pygame.draw.rect(reg["renderer"].layers[0]['occlusion_surf'], (255, 255, 255), (300 - 25, 240 - 25, 50, 50))
-    # pygame.draw.rect(reg["renderer"].layers[0]['emissive_surf'], (255, 255, 255), (300 - 25, 240 - 25, 50, 50))
-
-    # mp = list(reg.inputs.mouse_pos)
-    # pygame.draw.circle(reg["renderer"].layers[0]['occlusion_surf'], (255, 255, 255), (mp[0], mp[1]), 25)
-    # pygame.draw.circle(reg["renderer"].layers[0]['albedo_surf'], (12, 25, 255), (mp[0], mp[1]), 25)
-
-    #pygame.draw.circle(reg["renderer"].layers[0]['occlusion_surf'], (255, 255, 255), (384, 384), 25)
-    #pygame.draw.circle(reg["renderer"].layers[0]['emissive_surf'], (255, 255, 0), (384, 384), 25)
-
-    #pygame.draw.circle(reg["renderer"].layers[0]['occlusion_surf'], (100, 100, 100), (704, 504), 24)
+def vtest():
     pygame.draw.circle(reg["renderer"].layers[0]['albedo_surf'], (255, 255, 255), (1200, 450), 100, 15)
     pygame.draw.rect(reg["renderer"].layers[0]['albedo_surf'], (0, 0, 0), (1100, 412.5, 25, 75))
     pygame.draw.circle(reg["renderer"].layers[0]['emissive_surf'], (0, 127, 255), (1200, 450), 100, 15)
     pygame.draw.rect(reg["renderer"].layers[0]['emissive_surf'], (0, 0, 0), (1100, 412.5, 25, 75))
+    pygame.draw.circle(reg["renderer"].layers[0]['albedo_surf'], (0, 255, 0), (800, 450), 25)
 
-    pygame.draw.circle(reg["renderer"].layers[0]['albedo_surf'], (0, 255, 0), (500, 450), 50)
+while 1:
+    reg["window"].update()
+    reg["camera"].update()
 
+    vtest()
+
+    reg.renderer.mark_dirty(0, 'unlit')
     reg.renderer.mark_dirty(0, 'albedo')
     reg["renderer"].render()
+    pygame.display.set_caption(str(reg.window.fps))
 

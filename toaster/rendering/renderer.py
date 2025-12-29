@@ -143,6 +143,8 @@ class Renderer(RegistryItem):
             # process lit texture
             if layer['dirty']['albedo'] or layer['dirty']['occlusion'] or layer['dirty']['emissive']:
                 self.lighting.render(layer['albedo_surf'], layer['occlusion_surf'], layer['emissive_surf'])
+                layer['emissive_surf'].fill(self.clear_colour)
+                layer['albedo_surf'].fill(self.clear_colour)
                 layer['occlusion_surf'].fill(self.clear_colour)
                 layer['dirty']['albedo'] = layer['dirty']['occlusion'] = layer['dirty']['emissive'] = False
             
@@ -167,19 +169,21 @@ class Renderer(RegistryItem):
                 layer['dirty']['unlit'] = False
             
             # ::: RENDER TO SCREEN
-            self.ctx.screen.use()
-            layer['texture'].use(0)
-            self.default.program['_tex'] = 0
-            self.default.program['_flip'] = True
-            self.default.render()
-            
             # self.lighting.dist_buf.color_attachments[0].use(0)
             # self.lighting.jump_dbuf.current.tex.use(0)
             # self.lighting.albedo_tex.use(0)
             # self.lighting.emissive_tex.use(0)
+            # self.lighting.occlusion_tex.use(0)
             self.lighting.gi_dbuf.next.tex().use(0)
+            # self.lighting.diff_dbuf.next.tex().use(0)
             self.default.program['_tex'] = 0
             self.default.program['_flip'] = False
+            self.default.render()
+
+            self.ctx.screen.use()
+            layer['texture'].use(0)
+            self.default.program['_tex'] = 0
+            self.default.program['_flip'] = True
             self.default.render()
     
     def create_screen_vao(

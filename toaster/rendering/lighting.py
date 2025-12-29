@@ -15,14 +15,14 @@ class Lighting:
 
         # gi properties
         self.cascade_count: int = 6
-        self.cascade_linear: int = 1
+        self.cascade_scale: int = 1
         self.cascade_interval: float = 1
 
         # calculate cascade res
         cc = 2 ** self.cascade_count
         self.cascade_resolution = (
-            int(ceil((self.renderer.render_size[0] / self.cascade_linear) / float(cc)) * cc),
-            int(ceil((self.renderer.render_size[1] / self.cascade_linear) / float(cc)) * cc)
+            int(ceil((self.renderer.render_size[0] / self.cascade_scale) / float(cc)) * cc),
+            int(ceil((self.renderer.render_size[1] / self.cascade_scale) / float(cc)) * cc)
         )
 
         # get lighting shader
@@ -30,18 +30,16 @@ class Lighting:
         if lighting_sh is None: raise RuntimeError("Lighting shader not loaded")
 
         # load programs from shader
-        self.screen_uv = renderer.create_screen_vao(lighting_sh.get_program('screen_uv'))
-        self.jump_flood = renderer.create_screen_vao(lighting_sh.get_program('jump_flood'))
-        self.distance_field = renderer.create_screen_vao(lighting_sh.get_program('distance_field'))
         self.cascades = renderer.create_screen_vao(lighting_sh.get_program('cascades'))
+        self.diffuse = renderer.create_screen_vao(lighting_sh.get_program('diffuse'))
 
         # create render textures/buffers
         self.dist_tex = renderer.create_texture(swizzle='RGBA')
         self.albedo_tex = renderer.create_texture(swizzle='RGBA') # these are BGRA bc of pygame
         self.emissive_tex = renderer.create_texture(swizzle='RGBA')
+        self.occlusion_tex = renderer.create_texture(swizzle='RGBA')
 
-        self.jump_dbuf = DoubleTextureBuffer.create(renderer, swizzle='RGBA')
-        self.dist_buf = renderer.ctx.framebuffer(color_attachments=[self.dist_tex])
+        self.diff_dbuf = DoubleTextureBuffer.create(renderer, swizzle='RGBA', size=self.cascade_resolution)
         self.gi_dbuf = DoubleTextureBuffer.create(
             renderer, 
             size=self.cascade_resolution,
@@ -56,54 +54,6 @@ class Lighting:
         occlusion: pygame.Surface, 
         emissive: pygame.Surface
     ) -> None:
-        # self.jump_dbuf.clear()
-
-        # # write occlusion buffer to jump1
-        # self.jump_dbuf.current.tex.write(occlusion.get_view('1'))
-
-        # # render seed to jump buffer
-        # self.jump_dbuf.next.buf.use()
-        # self.jump_dbuf.current.tex.use(0)
-        # self.screen_uv.program['_tex'] = 0
-        # self.screen_uv.render()
-        # self.jump_dbuf.flip()
-
-        # # init jump flood algorithm
-        # self.jump_flood.program['_tex'] = 0
-
-        # max_dim = max(self.renderer.render_size)
-        # steps = max(1, int(ceil(log2(max_dim))))
-        # step_size_px = 1 << (steps - 1)
-        # aspect = (
-        #     self.renderer.render_size[0] / max_dim,
-        #     self.renderer.render_size[1] / max_dim
-        # )
-
-        # # start jump flood algorithm
-        # # -> final ends up rendering to current buf
-        # # -> can add smoothing steps if necessary
-        # for _ in range(steps):
-        #     # calculate and set step size
-        #     self.jump_flood.program['_stepSize'] = (
-        #         int(step_size_px * aspect[0]), 
-        #         int(step_size_px * aspect[1])
-        #     ); step_size_px >>= 1
-
-        #     # clear buffer
-        #     self.jump_dbuf.next.buf.clear()
-        #     self.jump_dbuf.next.buf.use()
-
-        #     # run program
-        #     self.jump_dbuf.current.tex.use(0)
-        #     self.jump_flood.render()
-        #     self.jump_dbuf.flip()
-
-        # # render distance field
-        # self.dist_buf.use()
-        # self.jump_dbuf.current.tex.use(0)
-        # self.distance_field.program['_tex'] = 0
-        # self.distance_field.render()
-
         # cascades
         self.gi_dbuf.clear(a=1)
         self.cascades.program['_tex'] = 0
@@ -115,37 +65,42 @@ class Lighting:
 
         self.emissive_tex.write(emissive.get_view('1'))
         self.emissive_tex.use(2)
-        #self.emissive_tex.build_mipmaps()
+       # self.emissive_tex.build_mipmaps()
         self.cascades.program['_emissiveTex'] = 2
 
-        self.dist_tex.use(3)
-        #self.cascades.program['_distanceTex'] = 3
-
-        self.jump_dbuf.current.tex().write(occlusion.get_view('1'))
-        self.jump_dbuf.current.tex().use(4)
-        #self.cascades.program['_occlusionTex'] = 4
+        #self.diff_dbuf.next.tex().use(3)
+        #self.cascades.program['_diffuseTex'] = 3
 
         self.cascades.program['_renderResolution'] = self.renderer.render_size
         self.cascades.program['_cascadeResolution'] = self.cascade_resolution
-        self.cascades.program['_cascadeLinear'] = self.cascade_linear
+        self.cascades.program['_cascadeScale'] = self.cascade_scale
         self.cascades.program['_cascadeInterval'] = self.cascade_interval
         self.cascades.program['_cascadeCount'] = self.cascade_count
 
-        for i in range(self.cascade_count - 1, -1, -1):
-            self.cascades.program['_cascadeIndex'] = i
+        query = self.renderer.ctx.query(samples=True, time=True)
+        with query:
+            for i in range(self.cascade_count - 1, -1, -1):
+                self.cascades.program['_cascadeIndex'] = i
 
-            self.gi_dbuf.current.buf.use()
-            self.gi_dbuf.next.tex().use(0)
-            self.cascades.render()
-            self.gi_dbuf.flip()
-            #break
-        # for i in range(0, self.cascade_count):
-        #     self.cascades.program['_cascadeIndex'] = i
+                self.gi_dbuf.current.buf.use()
+                self.gi_dbuf.next.tex().use(0) # next cascade
+                self.cascades.render()
+                self.gi_dbuf.flip()
+        # print('It took %d milliseconds' % (float(query.elapsed) * 1e-6))
+        # print('to render %d samples' % query.samples)
 
-        #     #self.gi_dbuf.current.buf.clear(alpha=1)
-        #     self.gi_dbuf.current.buf.use()
-        #     self.gi_dbuf.next.tex.use(0)
-        #     self.cascades.render()
-        #     self.gi_dbuf.flip()
-        #     break
-            
+        # self.diff_dbuf.next.tex().use(0)
+        # self.diffuse.program['_tex'] = 0
+        # self.diff_dbuf.current.buf.use()
+
+        # self.gi_dbuf.next.tex().use(1)
+        # self.diffuse.program['_radianceTex'] = 1
+
+        # self.occlusion_tex.write(occlusion.get_view('1'))
+        # self.occlusion_tex.use(2)
+        # self.diffuse.program['_occlusionTex'] = 2
+
+        # #self.diffuse.program['_renderResolution'] = self.renderer.render_size
+        # self.diffuse.render()
+        # self.diff_dbuf.flip()
+
