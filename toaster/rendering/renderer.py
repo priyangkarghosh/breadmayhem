@@ -65,7 +65,7 @@ class Renderer(RegistryItem):
         #self.ctx.enable(mgl.BLEND)
 
         # create the shader manager
-        self.shaders = ShaderManager(self.ctx, '330 core', SHADERS_PATH, {})
+        self.shaders = ShaderManager(self.ctx, '430 core', SHADERS_PATH, {'SUBGROUP_SIZE':32})
         
         # create the default screen buffer (covers whole screen)
         self.screen_buffer = self.ctx.buffer(data=array('f', [

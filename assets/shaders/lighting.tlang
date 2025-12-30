@@ -1,3 +1,4 @@
+[include(dda)]
 [program('cascades', vert='default_vert', frag='cascades')]
 [program('diffuse', vert='default_vert', frag='diffuse')]
 
@@ -18,28 +19,122 @@ void default_vert() {
     gl_Position = vec4(vert, 0.0, 1.0);
 }
 
-[link('cascades')]
+// [link('cascades')]
+// void raymarch(vec2 origin, vec2 delta, float range, out vec4 radiance, out vec4 transmittance) {
+//     vec2 texel = 1.0 / _renderResolution;
+
+//     vec2 ray = origin * texel;
+//     float stepSize = 1.0;
+//     vec2 cellStep = delta * texel * stepSize;
+
+//     radiance = vec4(0.0);
+//     transmittance = vec4(1.0);
+//     for(float i = 0.0; i < range; i += stepSize) {
+//         ray += cellStep;
+//         if (floor(ray) != vec2(0.0)) break;
+
+//         // dda check
+//         uvec2 s = uvec2(ceil(_renderResolution / vec2(32, 32)));
+//         uvec2 t = uvec2(ray * s);
+//         if (grid[t.x + t.y * s.x] == 0) {
+//             // Calculate DDA to skip to next grid cell
+//             vec2 gridPos = vec2(t) / vec2(s);
+//             vec2 gridSize = 1.0 / vec2(s);
+            
+//             // Calculate distances to grid boundaries
+//             vec2 stepDir = sign(cellStep);
+//             vec2 nextBoundary = gridPos + gridSize * max(stepDir, vec2(0.0));
+//             vec2 tMax = (nextBoundary - ray) / cellStep;
+            
+//             float tStep = min(tMax.x, tMax.y);
+//             ray += cellStep * (tStep + 0.001);
+//             i += tStep * stepSize;
+//             continue;
+//         }
+
+//         vec3 emiss = LINEAR(texture(_emissiveTex, ray).rgb);
+// 		vec3 absrp = LINEAR(texture(_albedoTex, ray).rgb);
+
+// 		vec3 trans = exp(-absrp * stepSize);
+//         radiance.rgb += (emiss - emiss * trans) * transmittance.rgb;
+//         transmittance.rgb *= trans;
+//     }
+
+//     radiance = vec4(radiance.rgb, 1.0);
+// }
+
+[link("cascades")]
 void raymarch(vec2 origin, vec2 delta, float range, out vec4 radiance, out vec4 transmittance) {
-    vec2 texel = 1.0 / _renderResolution;
-
-    vec2 ray = origin * texel;
-    vec2 step = delta * texel;
-
-    radiance = vec4(0.0);
+    vec2 texel = 1 / _renderResolution;
+    radiance = vec4(0.0, 0.0, 0.0, 1.0);
     transmittance = vec4(1.0);
-    for(float i = 0.0; i < range; i++) {
-        ray += step;
-        if (floor(ray) != vec2(0.0)) break;
-        
-        vec3 emiss = LINEAR(texture(_emissiveTex, ray).rgb);
-		vec3 absrp = LINEAR(texture(_albedoTex, ray).rgb);
 
-		vec3 trans = exp(-absrp);
-        radiance.rgb += (emiss - emiss * trans) * transmittance.rgb;
-        transmittance.rgb *= trans;
+    vec2 dir = delta;
+    vec2 invDir = 1.0 / dir;
+
+    // grid setup
+    const vec2 cellSize = vec2(SUBGROUP_SIZE);
+    vec2 gridSize = ceil(_renderResolution / cellSize);
+
+    // current grid cell
+    ivec2 cell = ivec2(floor(origin / cellSize));
+    ivec2 cellStep = ivec2(sign(dir));
+
+    // calculate distance along ray
+    vec2 nextBoundary = (vec2(cell) + cellStep * 0.5 + 0.5) * cellSize; // world space
+    vec2 tMax = (nextBoundary - origin) * invDir;
+    vec2 tDelta = abs(cellSize * invDir);
+
+    // dda
+    float t = 0.0;
+    while (t < range) {
+        // bounds check
+        int idx = cell.x + cell.y * int(gridSize.x);
+        if (idx > int(gridSize.x * gridSize.y)) return;
+
+        // check axis
+        float tNext;
+        if (tMax.x < tMax.y) {
+            tNext = tMax.x;
+            tMax.x += tDelta.x;
+            cell.x += cellStep.x;
+        } else {
+            tNext = tMax.y;
+            tMax.y += tDelta.y;
+            cell.y += cellStep.y;
+        }
+
+        // if cell is occupied, then raymarch
+        // -> skip otherwise
+        if (grid[idx] != 0) {
+            float tEnter = max(t, 0.0);
+            float tExit = min(tNext, range);
+
+            // 
+            vec2 ray = (origin + dir * tEnter) * texel;
+            vec2 marchStep = dir * texel; // march 1 pixel at a time
+            float marchLen = tExit - tEnter;
+
+            for (float s = 0.0; s < marchLen; s += 1.0) {
+                if (floor(ray) != vec2(0.0)) return;
+
+                vec3 emiss = LINEAR(texture(_emissiveTex, ray).rgb);
+                vec3 absrp = LINEAR(texture(_albedoTex, ray).rgb);
+                vec3 trans = exp(-absrp);
+
+                radiance.rgb += (emiss - emiss * trans) * transmittance.rgb;
+                transmittance.rgb *= trans;
+
+                ray += marchStep;
+                if (transmittance.r < EPSILON &&
+                    transmittance.g < EPSILON &&
+                    transmittance.b < EPSILON)
+                    return;
+            }
+        }
+
+        t = tNext;
     }
-
-    radiance = vec4(radiance.rgb, 1.0);
 }
 
 [link('cascades')]

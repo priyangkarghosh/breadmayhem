@@ -18,7 +18,7 @@ from toaster.physics.physics_rect import DYNAMIC
 # set the sizes
 render_size = (1600, 900)
 window_size = (1600, 900)
-Window(flags=HWACCEL, fps_cap=65, size=window_size)
+Window(flags=HWACCEL, fps_cap=0, size=window_size)
 
 # initialize pygame
 pygame.mixer.init()
@@ -34,11 +34,14 @@ Renderer(render_size=render_size)
 reg = Registry.instance()
 
 def vtest():
-    pygame.draw.circle(reg["renderer"].layers[0]['albedo_surf'], (255, 255, 255), (1200, 450), 100, 15)
-    pygame.draw.rect(reg["renderer"].layers[0]['albedo_surf'], (0, 0, 0), (1100, 412.5, 25, 75))
-    pygame.draw.circle(reg["renderer"].layers[0]['emissive_surf'], (0, 127, 255), (1200, 450), 100, 15)
-    pygame.draw.rect(reg["renderer"].layers[0]['emissive_surf'], (0, 0, 0), (1100, 412.5, 25, 75))
-    pygame.draw.circle(reg["renderer"].layers[0]['albedo_surf'], (0, 255, 0), (800, 450), 25)
+    convx = render_size[0] / 1600
+    convy = render_size[1] / 900
+    m = max(convx, convy)
+    pygame.draw.circle(reg["renderer"].layers[0]['albedo_surf'], (255, 255, 255), (1200 * convx, 450 * convy), 100 * convx, int(15 * m))
+    pygame.draw.rect(reg["renderer"].layers[0]['albedo_surf'], (0, 0, 0), (1100 * convx, 412.5 * convy, 25 * convx, 75 * convy))
+    pygame.draw.circle(reg["renderer"].layers[0]['emissive_surf'], (0, 127, 255), (1200 * convx, 450 * convy), 100 * convx, int(15 * m))
+    pygame.draw.rect(reg["renderer"].layers[0]['emissive_surf'], (0, 0, 0), (1100 * convx, 412.5 * convy, 25 * convx, 75 * convx))
+    pygame.draw.circle(reg["renderer"].layers[0]['albedo_surf'], (0, 255, 0), (800 * convx, 450 * convy), int(25 * m))
 
 while 1:
     reg["window"].update()
