@@ -19,6 +19,31 @@ void default_vert() {
     gl_Position = vec4(vert, 0.0, 1.0);
 }
 
+// [link('cascades')]
+// void raymarch(vec2 origin, vec2 delta, float range, out vec4 radiance, out vec4 transmittance) {
+//     vec2 texel = 1.0 / _renderResolution;
+
+//     vec2 ray = origin * texel;
+//     vec2 step = delta * texel;
+
+//     radiance = vec4(0.0);
+//     transmittance = vec4(1.0);
+//     for(float i = 0.0; i < range; i++) {
+//         if (floor(ray) != vec2(0.0)) break;
+        
+//         vec3 emiss = LINEAR(textureLod(_emissiveTex, ray, 0).rgb);
+// 		vec3 absrp = LINEAR(textureLod(_albedoTex, ray, 0).rgb);
+// 		vec3 trans = exp(-absrp);
+// 		vec3 radnc = (1.0 - trans) * emiss;
+
+// 		radiance.rgb += radnc * transmittance.rgb;
+// 		transmittance.rgb *= trans;
+//         ray += step;
+//     }
+
+//     radiance = vec4(radiance.rgb, 1.0);
+// }
+
 [link("cascades")]
 void raymarch(vec2 origin, vec2 delta, float range, out vec4 radiance, out vec4 transmittance) {
     vec2 texel = 1 / _renderResolution;
@@ -26,7 +51,7 @@ void raymarch(vec2 origin, vec2 delta, float range, out vec4 radiance, out vec4 
     transmittance = vec4(1.0);
 
     vec2 dir = delta;
-    vec2 invDir = 1.0 / dir;
+    vec2 invDir = 1.0 / (dir + sign(dir) * EPSILON);
 
     // grid setup
     const vec2 cellSize = vec2(SUBGROUP_SIZE);
@@ -35,9 +60,13 @@ void raymarch(vec2 origin, vec2 delta, float range, out vec4 radiance, out vec4 
     // current grid cell
     ivec2 cell = ivec2(floor(origin / cellSize));
     ivec2 cellStep = ivec2(sign(dir));
+    
+    // calculate boundary
+    vec2 nextBoundary;
+    nextBoundary.x = (float(cell.x) + max(0.0, float(cellStep.x))) * cellSize.x;
+    nextBoundary.y = (float(cell.y) + max(0.0, float(cellStep.y))) * cellSize.y;
 
     // calculate distance along ray
-    vec2 nextBoundary = (vec2(cell) + cellStep * 0.5 + 0.5) * cellSize; // world space
     vec2 tMax = (nextBoundary - origin) * invDir;
     vec2 tDelta = abs(cellSize * invDir);
 
@@ -45,8 +74,8 @@ void raymarch(vec2 origin, vec2 delta, float range, out vec4 radiance, out vec4 
     float t = 0.0;
     while (t < range) {
         // bounds check
+        if (cell.x < 0 || cell.y < 0 || cell.x >= int(gridSize.x) || cell.y >= int(gridSize.y)) return;
         int idx = cell.x + cell.y * int(gridSize.x);
-        if (idx > int(gridSize.x * gridSize.y)) return;
 
         // check axis
         float tNext;
@@ -67,21 +96,24 @@ void raymarch(vec2 origin, vec2 delta, float range, out vec4 radiance, out vec4 
             float tExit = min(tNext, range);
 
             // 
-            vec2 ray = (origin + dir * tEnter) * texel;
-            float stepSize = pow(2.0, _cascadeIndex) * 0.5;
+            float stepSize = pow(2.0, _cascadeIndex) * 0.5;;
             vec2 marchStep = dir * stepSize * texel;
             float marchLen = tExit - tEnter;
 
-            for (float s = 0.0; s < marchLen; s += stepSize) {
-                if (floor(ray) != vec2(0.0)) return;
+            //
+            vec2 ray = (origin + dir * tEnter) * texel;
+            int maxSteps = int(ceil(marchLen / stepSize)) + 1;
+            for (int s = 0; s < maxSteps; s++) {
+                float p = t + float(s) * stepSize;
+                if (floor(ray) != vec2(0.0) || p >= range) return;
 
-                float u = (t + s) / range;
-                float mip = pow((_cascadeIndex + u) / _cascadeCount, 4.0);
+                float u = min(1.0 - EPSILON, (t + s) / range);
+                float mip = 4 * pow(float(_cascadeIndex + u) / float(_cascadeCount - 1), 4);
                 vec3 emiss = LINEAR(textureLod(_emissiveTex, ray, mip).rgb);
                 vec3 absrp = LINEAR(textureLod(_albedoTex, ray, mip).rgb);
 
                 vec3 trans = exp(-absrp * stepSize);
-                vec3 coeff = mix(vec3(stepSize), 1.0 - trans, step(vec3(EPSILON), absrp));
+                vec3 coeff = mix(vec3(stepSize), (vec3(1.0) - trans) / (absrp + EPSILON), step(vec3(EPSILON), absrp));
                 radiance.rgb += emiss * coeff * transmittance.rgb;
                 transmittance.rgb *= trans;
 

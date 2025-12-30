@@ -16,8 +16,8 @@ from toaster.registry.registry import Registry
 from toaster.physics.physics_rect import DYNAMIC
 
 # set the sizes
-render_size = (1600, 900)
-window_size = (1600, 900)
+render_size = (512, 512)
+window_size = (512, 512)
 Window(flags=HWACCEL, fps_cap=0, size=window_size)
 
 # initialize pygame
@@ -47,9 +47,9 @@ while 1:
     reg["window"].update()
     reg["camera"].update()
 
-    pygame.draw.circle(reg["renderer"].layers[0]['emissive_surf'], (255, 255, 255), (800, 450), 5)
-    pygame.draw.circle(reg["renderer"].layers[0]['albedo_surf'], (255, 255, 255), (800, 450), 5)
-    # vtest()
+    pygame.draw.circle(reg["renderer"].layers[0]['emissive_surf'], (255, 255, 255), (256, 256), 4)
+    pygame.draw.circle(reg["renderer"].layers[0]['albedo_surf'], (255, 255, 255), (256, 256), 4)
+    #vtest()
 
     reg.renderer.mark_dirty(0, 'unlit')
     reg.renderer.mark_dirty(0, 'albedo')
