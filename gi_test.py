@@ -47,9 +47,8 @@ while 1:
     reg["window"].update()
     reg["camera"].update()
 
-    #vtest()
-    # pygame.draw.circle(reg["renderer"].layers[0]['emissive_surf'], (255, 255, 255), (800, 450), 2)
-    # pygame.draw.circle(reg["renderer"].layers[0]['albedo_surf'], (255, 255, 255), (800, 450), 2)
+    pygame.draw.circle(reg["renderer"].layers[0]['emissive_surf'], (255, 255, 255), (800, 450), 5)
+    pygame.draw.circle(reg["renderer"].layers[0]['albedo_surf'], (255, 255, 255), (800, 450), 5)
 
     reg.renderer.mark_dirty(0, 'unlit')
     reg.renderer.mark_dirty(0, 'albedo')

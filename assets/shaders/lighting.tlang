@@ -76,8 +76,8 @@ void raymarch(vec2 origin, vec2 delta, float range, out vec4 radiance, out vec4 
                 if (floor(ray) != vec2(0.0)) return;
 
                 float mip = _cascadeIndex + ((t + s) / range);
-                vec3 emiss = LINEAR(textureLod(_emissiveTex, ray, mip).rgb);
-                vec3 absrp = LINEAR(textureLod(_albedoTex, ray, mip).rgb);
+                vec3 emiss = LINEAR(texture(_emissiveTex, ray).rgb);
+                vec3 absrp = LINEAR(texture(_albedoTex, ray).rgb);
                 vec3 trans = exp(-absrp);
 
                 radiance.rgb += (emiss - emiss * trans) * transmittance.rgb;

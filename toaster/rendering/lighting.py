@@ -65,12 +65,12 @@ class Lighting:
 
         self.albedo_tex.write(albedo.get_view('1'))
         self.albedo_tex.use(1)
-        self.albedo_tex.build_mipmaps()
+        #self.albedo_tex.build_mipmaps()
         self.cascades.program['_albedoTex'] = 1
 
         self.emissive_tex.write(emissive.get_view('1'))
         self.emissive_tex.use(2)
-        self.emissive_tex.build_mipmaps()
+        #self.emissive_tex.build_mipmaps()
         self.cascades.program['_emissiveTex'] = 2
 
         #self.diff_dbuf.next.tex().use(3)
