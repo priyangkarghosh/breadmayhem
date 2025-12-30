@@ -16,7 +16,7 @@ from toaster.registry.registry import Registry
 from toaster.physics.physics_rect import DYNAMIC
 
 # set the sizes
-render_size = (800, 450)
+render_size = (1600, 900)
 window_size = (1600, 900)
 Window(flags=HWACCEL, fps_cap=0, size=window_size)
 

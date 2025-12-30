@@ -71,8 +71,8 @@ void raymarch(vec2 origin, vec2 delta, float range, out vec4 radiance, out vec4 
             float stepSize = _cascadeIndex + 1;
             vec2 marchStep = dir * stepSize * texel; // march 1 pixel at a time
             float marchLen = tExit - tEnter;
-
             for (float s = 0.0; s < marchLen; s += stepSize) {
+                ray += marchStep;
                 if (floor(ray) != vec2(0.0)) return;
 
                 vec3 emiss = LINEAR(texture(_emissiveTex, ray).rgb);
@@ -81,8 +81,6 @@ void raymarch(vec2 origin, vec2 delta, float range, out vec4 radiance, out vec4 
 
                 radiance.rgb += (emiss - emiss * trans) * transmittance.rgb;
                 transmittance.rgb *= trans;
-
-                ray += marchStep;
                 if (all(lessThan(transmittance.rgb, vec3(EPSILON))))
                     return;
             }

@@ -12,15 +12,11 @@ layout(std430) buffer Grid { uint grid[]; };
 void dda() {
     // grid index
     uint index = gl_WorkGroupID.x + (gl_WorkGroupID.y * gl_NumWorkGroups.x);
-    
-    //
     const uint tid = gl_LocalInvocationIndex;
     if (tid == 0) cluster = 0;
     
     vec3 s = texelFetch(_tex, ivec2(gl_GlobalInvocationID.xy), 0).rgb;
-
-    bool cond = any(greaterThan(s, vec3(0)));
-    if (subgroupAny(cond) && subgroupElect()) atomicOr(cluster, 1);
+    if (subgroupAny(any(greaterThan(s, vec3(0)))) && subgroupElect()) atomicOr(cluster, 1);
     barrier();
 
     if (tid == 0) grid[index] = cluster;
