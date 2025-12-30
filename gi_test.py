@@ -49,6 +49,7 @@ while 1:
 
     pygame.draw.circle(reg["renderer"].layers[0]['emissive_surf'], (255, 255, 255), (800, 450), 5)
     pygame.draw.circle(reg["renderer"].layers[0]['albedo_surf'], (255, 255, 255), (800, 450), 5)
+    # vtest()
 
     reg.renderer.mark_dirty(0, 'unlit')
     reg.renderer.mark_dirty(0, 'albedo')

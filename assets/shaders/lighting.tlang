@@ -75,12 +75,14 @@ void raymarch(vec2 origin, vec2 delta, float range, out vec4 radiance, out vec4 
             for (float s = 0.0; s < marchLen; s += stepSize) {
                 if (floor(ray) != vec2(0.0)) return;
 
-                float mip = _cascadeIndex + ((t + s) / range);
-                vec3 emiss = LINEAR(texture(_emissiveTex, ray).rgb);
-                vec3 absrp = LINEAR(texture(_albedoTex, ray).rgb);
-                vec3 trans = exp(-absrp);
+                float u = (t + s) / range;
+                float mip = pow((_cascadeIndex + u) / _cascadeCount, 4.0);
+                vec3 emiss = LINEAR(textureLod(_emissiveTex, ray, mip).rgb);
+                vec3 absrp = LINEAR(textureLod(_albedoTex, ray, mip).rgb);
 
-                radiance.rgb += (emiss - emiss * trans) * transmittance.rgb;
+                vec3 trans = exp(-absrp * stepSize);
+                vec3 coeff = mix(vec3(stepSize), 1.0 - trans, step(vec3(EPSILON), absrp));
+                radiance.rgb += emiss * coeff * transmittance.rgb;
                 transmittance.rgb *= trans;
 
                 ray += marchStep;
