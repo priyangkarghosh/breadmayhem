@@ -93,6 +93,15 @@ void raymarch(vec2 origin, vec2 delta, float range, out vec4 radiance, out vec4 
 }
 
 [link('cascades')]
+void getBilinearProbes(vec2 probe, out vec2 probes[4]) {
+	vec2 probeN1 = floor((probe - 1.0) / 2.0);
+	probes[0] = probeN1 + vec2(0.0, 0.0);
+	probes[1] = probeN1 + vec2(1.0, 0.0);
+	probes[2] = probeN1 + vec2(0.0, 1.0);
+	probes[3] = probeN1 + vec2(1.0, 1.0);
+}
+
+[link('cascades')]
 vec4 merge(vec4 radiance, vec4 transmittance, float index, vec2 probe) {
 	if (_cascadeIndex >= _cascadeCount - 1.0) return radiance;
     
@@ -100,8 +109,7 @@ vec4 merge(vec4 radiance, vec4 transmittance, float index, vec2 probe) {
 	vec2 extentN1 = floor(_cascadeResolution / angularN1);
 
 	vec2 interpN1 = vec2(mod(index, angularN1), floor(index / angularN1)) * extentN1;
-    interpN1 += clamp((probe * 0.5) + 0.25, vec2(0.5), extentN1 - 0.5);
-
+    interpN1 += clamp(probe + 0.5, vec2(0.5), extentN1 - vec2(0.5));
 	vec4 mergeRadiance = texture(_tex, interpN1 / _cascadeResolution);
 	return radiance + mergeRadiance * transmittance;
 }
@@ -130,7 +138,9 @@ void cascades() {
     vec2 coord = floor(v_uv * _cascadeResolution);
     vec2 extent = floor(_cascadeResolution / sqrtAngular);
     vec4 probe = vec4(mod(coord, extent), floor(coord / extent));
+
     vec2 linear = vec2(_cascadeScale * sqrtAngular);
+    vec2 linearN1 = vec2(_cascadeScale * pow(2.0, _cascadeIndex + 1.0));
     
     float offset = _cascadeInterval * ((1.0 - pow(4.0, _cascadeIndex)) / (1.0 - 4.0));
     float range = _cascadeInterval * pow(4.0, _cascadeIndex);
@@ -140,17 +150,40 @@ void cascades() {
     vec2 origin = (probe.xy + 0.5) * linear;
     float base = (probe.z + (probe.w * sqrtAngular)) * 4.0;
 
+    // === bilinear fix === 
+	vec2 bilinearN1[4];
+	getBilinearProbes(probe.xy, bilinearN1);
+	vec2 texelIndexN1 = floor((vec2(probe.xy) - 1.0) / 2.0);
+	vec2 texelIndexN1_N = floor((texelIndexN1 * 2.0) + 1.0);
+	vec2 weight = vec2(0.25) + (vec2(probe.xy) - texelIndexN1_N) * vec2(0.5);
+    // =================== 
+
     vec4 acc = vec4(0);
     [unroll]
 	for (float i = 0; i < 4; i++) {
         float index = base + i;
-		float theta = (index + 0.5) * (TAU / angular);	
-        vec2 delta = vec2(cos(theta), -sin(theta));
-        vec2 ray = origin + (delta * offset);
 
-        vec4 radiance, transmittance;
-		raymarch(ray, delta, range, radiance, transmittance);
-		acc += merge(radiance, transmittance, index, probe.xy) * 0.25;
+		float theta = (index + 0.5) * (TAU / angular);	
+        float thetaNm1 = (floor(index / 4.0) + 0.5) * (TAU / (angular / 4.0));
+
+        vec2 delta = vec2(cos(theta), -sin(theta));
+        vec2 deltaNm1 = vec2(cos(thetaNm1), -sin(thetaNm1));
+
+		vec4 samples[4];
+        vec2 ray_start = origin + (deltaNm1 * offset);
+        [unroll]
+		for(int j = 0; j < 4; j++) {
+            vec2 originN1 = (bilinearN1[j] + 0.5) * linearN1;
+			vec2 ray_end = originN1 + (delta * (offset + range));
+
+            vec4 radiance, transmittance;
+			raymarch(ray_start, normalize(ray_end - ray_start), length(ray_end - ray_start), radiance, transmittance);
+            samples[j] = merge(radiance, transmittance, index, bilinearN1[j]);
+		}
+
+        vec4 top = mix(samples[0], samples[1], weight.x);
+		vec4 bot = mix(samples[2], samples[3], weight.x);
+		acc += mix(top, bot, weight.y) * 0.25;
 	}
 	
     if (_cascadeIndex == 0.0) acc = vec4(SRGB(acc.rgb), 1.0);
