@@ -59,18 +59,25 @@ class Lighting:
         occlusion: pygame.Surface, 
         emissive: pygame.Surface
     ) -> None:
-        # cascades
-        self.gi_dbuf.clear(a=1)
-        self.cascades.program['_tex'] = 0
-
+        # set up textures
         self.albedo_tex.write(albedo.get_view('1'))
         self.albedo_tex.use(1)
-        #self.albedo_tex.build_mipmaps()
-        self.cascades.program['_albedoTex'] = 1
+        self.albedo_tex.build_mipmaps()
 
         self.emissive_tex.write(emissive.get_view('1'))
         self.emissive_tex.use(2)
-        #self.emissive_tex.build_mipmaps()
+        self.emissive_tex.build_mipmaps()
+        
+        # dda
+        t = (ceil(self.renderer.render_size[0] / float(32)), ceil(self.renderer.render_size[1] / float(32)))
+        self.dda_kernel.bind_ssbo("Grid", self.dda_buff)
+        self.dda_kernel.set_uniforms(_tex=1)
+        self.dda_kernel.dispatch(t[0], t[1])
+        
+        # cascades
+        self.gi_dbuf.clear(a=1)
+        self.cascades.program['_tex'] = 0
+        self.cascades.program['_albedoTex'] = 1
         self.cascades.program['_emissiveTex'] = 2
 
         #self.diff_dbuf.next.tex().use(3)
@@ -106,12 +113,6 @@ class Lighting:
         # #self.diffuse.program['_renderResolution'] = self.renderer.render_size
         # self.diffuse.render()
         # self.diff_dbuf.flip()
-
-        # dda test
-        t = (ceil(self.renderer.render_size[0] / float(32)), ceil(self.renderer.render_size[1] / float(32)))
-        self.dda_kernel.bind_ssbo("Grid", self.dda_buff)
-        self.dda_kernel.set_uniforms(_tex=1)
-        self.dda_kernel.dispatch(t[0], t[1])
 
         #a = np.frombuffer(self.dda_buff.read(), dtype=np.uint32)
         #print(a, len(a))
