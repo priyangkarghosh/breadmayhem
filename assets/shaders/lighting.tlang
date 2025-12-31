@@ -19,67 +19,44 @@ void default_vert() {
     gl_Position = vec4(vert, 0.0, 1.0);
 }
 
-// [link('cascades')]
-// void raymarch(vec2 origin, vec2 delta, float range, out vec4 radiance, out vec4 transmittance) {
-//     vec2 texel = 1.0 / _renderResolution;
-
-//     vec2 ray = origin * texel;
-//     vec2 step = delta * texel;
-
-//     radiance = vec4(0.0);
-//     transmittance = vec4(1.0);
-//     for(float i = 0.0; i < range; i++) {
-//         if (floor(ray) != vec2(0.0)) break;
-        
-//         vec3 emiss = LINEAR(textureLod(_emissiveTex, ray, 0).rgb);
-// 		vec3 absrp = LINEAR(textureLod(_albedoTex, ray, 0).rgb);
-// 		vec3 trans = exp(-absrp);
-// 		vec3 radnc = (1.0 - trans) * emiss;
-
-// 		radiance.rgb += radnc * transmittance.rgb;
-// 		transmittance.rgb *= trans;
-//         ray += step;
-//     }
-
-//     radiance = vec4(radiance.rgb, 1.0);
-// }
-
 [link("cascades")]
 void raymarch(vec2 origin, vec2 delta, float range, out vec4 radiance, out vec4 transmittance) {
-    vec2 texel = 1 / _renderResolution;
+    // init default values
     radiance = vec4(0.0, 0.0, 0.0, 1.0);
     transmittance = vec4(1.0);
 
-    vec2 dir = delta;
-    vec2 invDir = 1.0 / (dir + sign(dir) * EPSILON);
+    // 
+    const vec2 texel = 1.0 / _renderResolution;
+    const float rmStepSize = pow(2.0, _cascadeIndex) * 0.5;
+    const vec2 rmStepDelta = delta * rmStepSize * texel;
+    const vec2 invDelta = sign(delta) / max(abs(delta), vec2(EPSILON));
+    const float invRange = 1.0 / range;
 
-    // grid setup
+    // set up dda
     const vec2 cellSize = vec2(SUBGROUP_SIZE);
-    vec2 gridSize = ceil(_renderResolution / cellSize);
-
-    // current grid cell
+    const ivec2 cellStep = ivec2(sign(delta));
+    const ivec2 gridSize = ivec2(ceil(_renderResolution / cellSize));
     ivec2 cell = ivec2(floor(origin / cellSize));
-    ivec2 cellStep = ivec2(sign(dir));
-    
-    // calculate boundary
+
+    // calculate next boundary for dda
     vec2 nextBoundary;
-    nextBoundary.x = (float(cell.x) + max(0.0, float(cellStep.x))) * cellSize.x;
-    nextBoundary.y = (float(cell.y) + max(0.0, float(cellStep.y))) * cellSize.y;
+    nextBoundary.x = (float(cell.x) + float(max(0, cellStep.x))) * cellSize.x;
+    nextBoundary.y = (float(cell.y) + float(max(0, cellStep.y))) * cellSize.y;
 
     // calculate distance along ray
-    vec2 tMax = (nextBoundary - origin) * invDir;
-    vec2 tDelta = abs(cellSize * invDir);
+    vec2 tMax = abs((nextBoundary - origin) * invDelta);
+    vec2 tDelta = abs(cellSize * invDelta);
 
-    // dda
+    // dda loop
     float t = 0.0;
     while (t < range) {
         // bounds check
-        if (cell.x < 0 || cell.y < 0 || cell.x >= int(gridSize.x) || cell.y >= int(gridSize.y)) return;
-        int idx = cell.x + cell.y * int(gridSize.x);
+        if (cell.x < 0 || cell.y < 0 || cell.x >= gridSize.x || cell.y >= gridSize.y) return;
+        int idx = cell.x + cell.y * gridSize.x;
 
         // check axis
         float tNext;
-        if (tMax.x < tMax.y) {
+        if (tMax.x <= tMax.y) {
             tNext = tMax.x;
             tMax.x += tDelta.x;
             cell.x += cellStep.x;
@@ -95,29 +72,29 @@ void raymarch(vec2 origin, vec2 delta, float range, out vec4 radiance, out vec4 
             float tEnter = max(t, 0.0);
             float tExit = min(tNext, range);
 
-            // 
-            float stepSize = pow(2.0, _cascadeIndex) * 0.5;;
-            vec2 marchStep = dir * stepSize * texel;
+            // start march for this cell
             float marchLen = tExit - tEnter;
+            int marchSteps = int(ceil(marchLen / rmStepSize)) + 1;
+            vec2 ray = (origin + delta * tEnter) * texel;
+            for (int s = 0; s < marchSteps; s++) {
+                // bounds check
+                float p = tEnter + float(s) * rmStepSize;
+                if (ray.x < 0 || ray.y < 0 || ray.x > 1 || ray.y > 1 || p >= range) 
+                    return;
 
-            //
-            vec2 ray = (origin + dir * tEnter) * texel;
-            int maxSteps = int(ceil(marchLen / stepSize)) + 1;
-            for (int s = 0; s < maxSteps; s++) {
-                float p = t + float(s) * stepSize;
-                if (floor(ray) != vec2(0.0) || p >= range) return;
-
-                float u = min(1.0 - EPSILON, (t + s) / range);
-                float mip = 4 * pow(float(_cascadeIndex + u) / float(_cascadeCount - 1), 4);
+                // sample emission and absorption textures
+                float mip = _cascadeIndex + min(1.0 - EPSILON, p * invRange);
                 vec3 emiss = LINEAR(textureLod(_emissiveTex, ray, mip).rgb);
                 vec3 absrp = LINEAR(textureLod(_albedoTex, ray, mip).rgb);
 
-                vec3 trans = exp(-absrp * stepSize);
-                vec3 coeff = mix(vec3(stepSize), (vec3(1.0) - trans) / (absrp + EPSILON), step(vec3(EPSILON), absrp));
+                // update radiance/transmittance at this point
+                vec3 trans = exp(-absrp * rmStepSize);
+                vec3 coeff = (1.0 - trans) / max(absrp, vec3(EPSILON));
                 radiance.rgb += emiss * coeff * transmittance.rgb;
                 transmittance.rgb *= trans;
+                ray += rmStepDelta;
 
-                ray += marchStep;
+                // early exit if transmittance is too low
                 if (all(lessThan(transmittance.rgb, vec3(EPSILON))))
                     return;
             }
@@ -128,13 +105,12 @@ void raymarch(vec2 origin, vec2 delta, float range, out vec4 radiance, out vec4 
 }
 
 [link('cascades')]
-vec4 merge(vec4 radiance, vec4 transmittance, float index, vec2 probe) {
-	if (_cascadeIndex >= _cascadeCount - 1.0) return radiance;
+vec4 merge(vec4 radiance, vec4 transmittance, int index, vec2 probe) {
+	if (_cascadeIndex >= _cascadeCount - 1) return radiance;
     
-	float angularN1 = pow(2.0, floor(_cascadeIndex + 1.0));
+	float angularN1 = 1 << (_cascadeIndex + 1);
 	vec2 extentN1 = floor(_cascadeResolution / angularN1);
-
-	vec2 interpN1 = vec2(mod(index, angularN1), floor(index / angularN1)) * extentN1;
+	vec2 interpN1 = vec2(floor(mod(index, angularN1)), floor(index / angularN1)) * extentN1;
     interpN1 += clamp((probe * 0.5) + 0.25, vec2(0.5), extentN1 - 0.5);
 
 	vec4 mergeRadiance = texture(_tex, interpN1 / _cascadeResolution);
@@ -159,37 +135,37 @@ vec4 merge(vec4 radiance, vec4 transmittance, float index, vec2 probe) {
     out vec4 fragColour;
 )]
 void cascades() {
-    float sqrtAngular = floor(pow(2, _cascadeIndex));
-    float angular = floor(sqrtAngular * sqrtAngular * 4.0);
+    float sqrtAngular = floor(1 << _cascadeIndex);
+    float angular = floor(sqrtAngular * sqrtAngular * 4);
 
-    vec2 coord = floor(v_uv * _cascadeResolution);
-    vec2 extent = floor(_cascadeResolution / sqrtAngular);
-    vec4 probe = vec4(mod(coord, extent), floor(coord / extent));
+    ivec2 coord = ivec2(floor(v_uv * _cascadeResolution));
+    ivec2 extent = ivec2(floor(_cascadeResolution / sqrtAngular));
+    ivec4 probe = ivec4(mod(coord, extent), floor(coord / extent));
     vec2 linear = vec2(_cascadeScale * sqrtAngular);
     
-    float offset = _cascadeInterval * ((1.0 - pow(4.0, _cascadeIndex)) / (1.0 - 4.0));
-    float range = _cascadeInterval * pow(4.0, _cascadeIndex);
+    float pow4 = floor(1 << (2 * _cascadeIndex));
+    float offset = _cascadeInterval * ((1.0 - pow4) / -3);
+    float range = _cascadeInterval * pow4;
     range += length(linear * 2.0);
 
     // screen space ray origin
     vec2 origin = (probe.xy + 0.5) * linear;
-    float base = (probe.z + (probe.w * sqrtAngular)) * 4.0;
+    int base = int(probe.z + (probe.w * sqrtAngular)) * 4;
+    float angleStep = TAU / angular;
 
-    vec4 acc = vec4(0);
     [unroll]
-	for (float i = 0; i < 4; i++) {
-        float index = base + i;
-		float theta = (index + 0.5) * (TAU / angular);	
+	for (int i = 0; i < 4; i++) {
+        int index = base + i;
+		float theta = (index + 0.5) * angleStep;	
         vec2 delta = vec2(cos(theta), -sin(theta));
-        vec2 ray = origin + (delta * offset);
+        vec2 rayStart = origin + (delta * offset);
 
         vec4 radiance, transmittance;
-		raymarch(ray, delta, range, radiance, transmittance);
-		acc += merge(radiance, transmittance, index, probe.xy) * 0.25;
+		raymarch(rayStart, delta, range, radiance, transmittance);
+		fragColour += merge(radiance, transmittance, index, probe.xy) * 0.25;
 	}
 	
-    if (_cascadeIndex == 0.0) acc = vec4(SRGB(acc.rgb), 1.0);
-    fragColour = acc;
+    if (_cascadeIndex == 0) fragColour = vec4(SRGB(fragColour.rgb), 1.0);
 }
 
 [shader('frag')]
