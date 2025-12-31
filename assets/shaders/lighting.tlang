@@ -21,40 +21,42 @@ void default_vert() {
 
 [link("cascades")]
 void raymarch(vec2 origin, vec2 delta, float range, out vec4 radiance, out vec4 transmittance) {
-    vec2 texel = 1 / _renderResolution;
+    // init default values
     radiance = vec4(0.0, 0.0, 0.0, 1.0);
     transmittance = vec4(1.0);
 
-    vec2 dir = delta;
-    vec2 invDir = 1.0 / (dir + sign(dir) * EPSILON);
+    // 
+    const vec2 texel = 1.0 / _renderResolution;
+    const float rmStepSize = pow(2.0, _cascadeIndex) * 0.5;
+    const vec2 rmStepDelta = delta * rmStepSize * texel;
+    const vec2 invDelta = sign(delta) / max(abs(delta), vec2(EPSILON));
+    const float invRange = 1.0 / range;
 
-    // grid setup
+    // set up dda
     const vec2 cellSize = vec2(SUBGROUP_SIZE);
-    vec2 gridSize = ceil(_renderResolution / cellSize);
-
-    // current grid cell
+    const ivec2 cellStep = ivec2(sign(delta));
+    const ivec2 gridSize = ivec2(ceil(_renderResolution / cellSize));
     ivec2 cell = ivec2(floor(origin / cellSize));
-    ivec2 cellStep = ivec2(sign(dir));
-    
-    // calculate boundary
+
+    // calculate next boundary for dda
     vec2 nextBoundary;
-    nextBoundary.x = (float(cell.x) + max(0.0, float(cellStep.x))) * cellSize.x;
-    nextBoundary.y = (float(cell.y) + max(0.0, float(cellStep.y))) * cellSize.y;
+    nextBoundary.x = (float(cell.x) + float(max(0, cellStep.x))) * cellSize.x;
+    nextBoundary.y = (float(cell.y) + float(max(0, cellStep.y))) * cellSize.y;
 
     // calculate distance along ray
-    vec2 tMax = (nextBoundary - origin) * invDir;
-    vec2 tDelta = abs(cellSize * invDir);
+    vec2 tMax = abs((nextBoundary - origin) * invDelta);
+    vec2 tDelta = abs(cellSize * invDelta);
 
-    // dda
+    // dda loop
     float t = 0.0;
     while (t < range) {
         // bounds check
-        if (cell.x < 0 || cell.y < 0 || cell.x >= int(gridSize.x) || cell.y >= int(gridSize.y)) return;
-        int idx = cell.x + cell.y * int(gridSize.x);
+        if (cell.x < 0 || cell.y < 0 || cell.x >= gridSize.x || cell.y >= gridSize.y) return;
+        int idx = cell.x + cell.y * gridSize.x;
 
         // check axis
         float tNext;
-        if (tMax.x < tMax.y) {
+        if (tMax.x <= tMax.y) {
             tNext = tMax.x;
             tMax.x += tDelta.x;
             cell.x += cellStep.x;
@@ -70,29 +72,29 @@ void raymarch(vec2 origin, vec2 delta, float range, out vec4 radiance, out vec4 
             float tEnter = max(t, 0.0);
             float tExit = min(tNext, range);
 
-            // 
-            float stepSize = pow(2.0, _cascadeIndex) * 0.5;
-            vec2 marchStep = dir * stepSize * texel;
+            // start march for this cell
             float marchLen = tExit - tEnter;
+            int marchSteps = int(ceil(marchLen / rmStepSize)) + 1;
+            vec2 ray = (origin + delta * tEnter) * texel;
+            for (int s = 0; s < marchSteps; s++) {
+                // bounds check
+                float p = tEnter + float(s) * rmStepSize;
+                if (ray.x < 0 || ray.y < 0 || ray.x > 1 || ray.y > 1 || p >= range) 
+                    return;
 
-            //
-            vec2 ray = (origin + dir * tEnter) * texel;
-            int maxSteps = int(ceil(marchLen / stepSize)) + 1;
-            for (int s = 0; s < maxSteps; s++) {
-                float p = t + float(s) * stepSize;
-                if (floor(ray) != vec2(0.0) || p >= range) return;
+                // sample emission and absorption textures
+                float mip = _cascadeIndex + min(1.0 - EPSILON, p * invRange);
+                vec3 emiss = LINEAR(textureLod(_emissiveTex, ray, mip).rgb);
+                vec3 absrp = LINEAR(textureLod(_albedoTex, ray, mip).rgb);
 
-                float u = min(1.0 - EPSILON, (t + s) / range);
-                float mip = 4 * pow(float(_cascadeIndex + u) / float(_cascadeCount - 1), 4);
-                vec3 emiss = LINEAR(textureLod(_emissiveTex, ray, 0).rgb);
-                vec3 absrp = LINEAR(textureLod(_albedoTex, ray, 0).rgb);
-
-                vec3 trans = exp(-absrp * stepSize);
-                vec3 coeff = mix(vec3(stepSize), (vec3(1.0) - trans) / (absrp + EPSILON), step(vec3(EPSILON), absrp));
+                // update radiance/transmittance at this point
+                vec3 trans = exp(-absrp * rmStepSize);
+                vec3 coeff = (1.0 - trans) / max(absrp, vec3(EPSILON));
                 radiance.rgb += emiss * coeff * transmittance.rgb;
                 transmittance.rgb *= trans;
+                ray += rmStepDelta;
 
-                ray += marchStep;
+                // early exit if transmittance is too low
                 if (all(lessThan(transmittance.rgb, vec3(EPSILON))))
                     return;
             }
