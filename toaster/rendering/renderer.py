@@ -174,17 +174,18 @@ class Renderer(RegistryItem):
             # self.lighting.albedo_tex.use(0)
             # self.lighting.emissive_tex.use(0)
             # self.lighting.occlusion_tex.use(0)
+
+            self.ctx.screen.use()
             self.lighting.gi_dbuf.next.tex().use(0)
             # self.lighting.diff_dbuf.next.tex().use(0)
             self.default.program['_tex'] = 0
             self.default.program['_flip'] = False
             self.default.render()
 
-            self.ctx.screen.use()
-            layer['texture'].use(0)
-            self.default.program['_tex'] = 0
-            self.default.program['_flip'] = True
-            self.default.render()
+            # layer['texture'].use(0)
+            # self.default.program['_tex'] = 0
+            # self.default.program['_flip'] = True
+            # self.default.render()
     
     def create_screen_vao(
         self, program: mgl.Program

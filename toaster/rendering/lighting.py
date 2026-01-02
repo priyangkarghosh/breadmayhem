@@ -1,3 +1,4 @@
+import time
 from typing import TYPE_CHECKING
 if TYPE_CHECKING: from toaster.rendering.renderer import Renderer
 
@@ -25,6 +26,7 @@ class Lighting:
             int(ceil((self.renderer.render_size[0] / self.cascade_scale) / float(cc)) * cc),
             int(ceil((self.renderer.render_size[1] / self.cascade_scale) / float(cc)) * cc)
         )
+        print(self.cascade_resolution)
         
         # get lighting shader
         lighting_sh = renderer.shaders.get_shader('lighting')
@@ -52,6 +54,7 @@ class Lighting:
         # dda
         self.dda_kernel = renderer.shaders.get_shader('dda').get_kernel('dda')
         self.dda_buff = self.renderer.ctx.buffer(reserve=(4 * (ceil(self.renderer.render_size[0] / float(32)) * ceil(self.renderer.render_size[1] / float(32)))))
+        self.t = 0
 
     def render(
         self, 
@@ -96,6 +99,18 @@ class Lighting:
             self.gi_dbuf.next.tex().use(0) # next cascade
             self.cascades.render()
             self.gi_dbuf.flip()
+
+        # for i in range(self.t, self.cascade_count):
+        #     self.cascades.program['_cascadeIndex'] = i
+
+        #     self.gi_dbuf.current.buf.use()
+        #     self.gi_dbuf.next.tex().use(0) # next cascade
+        #     self.cascades.render()
+        #     self.gi_dbuf.flip()
+        #     break
+        # self.t += 1
+        # self.t %= self.cascade_count
+        # time.sleep(1)
         # print('It took %d milliseconds' % (float(query.elapsed) * 1e-6))
         # print('to render %d samples' % query.samples)
 
