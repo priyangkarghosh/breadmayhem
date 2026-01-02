@@ -21,36 +21,47 @@ void default_vert() {
 
 [link('cascades')]
 void raymarch(vec2 origin, vec2 delta, float range, out vec4 radiance, out vec4 transmittance) {
+    radiance = vec4(0.0, 0.0, 0.0, 1.0);
+    transmittance = vec4(1.0);
+    
     const vec2 texel = 1.0 / _renderResolution;
     const vec2 cellSize = vec2(SUBGROUP_SIZE);
     const ivec2 gridSize = ivec2(ceil(_renderResolution / cellSize));
-    const float rmStepSize = 1.0;
+    const float rmStepSize = pow(2.0, float(_cascadeIndex));
     
-    vec2 ray = origin;
-    vec2 step = delta * rmStepSize;
-
-    radiance = vec4(0.0);
-    transmittance = vec4(1.0);
-    for(float i = 0.0; i < range; i += rmStepSize) {
-        ray += step;
-        if (floor(ray * texel) != vec2(0.0)) break;
-
+    // Use normalized distance for consistent stepping
+    float t = 0.0;
+    const float dt = rmStepSize;
+    
+    while (t < range) {
+        t += dt;
+        vec2 ray = origin + delta * t;
+        
+        // More robust bounds checking
+        vec2 uv = ray * texel;
+        if (floor(uv) != vec2(0.0)) break;
+        
         ivec2 cell = ivec2(floor(ray / cellSize));
-        if (cell.x < 0 || cell.y < 0 || cell.x >= gridSize.x || cell.y >= gridSize.y) break;
+        if (any(lessThan(cell, ivec2(0))) || any(greaterThanEqual(cell, gridSize))) 
+            break;
+        
         int idx = cell.x + cell.y * gridSize.x;
-        if (grid[idx] == 0) continue;
-
-        float mip = _cascadeIndex + min(1.0 - EPSILON, i / range);
-        vec3 emiss = LINEAR(textureLod(_emissiveTex, ray * texel, 0).rgb);
-        vec3 absrp = LINEAR(textureLod(_albedoTex, ray * texel, 0).rgb);
-
-        // update radiance/transmittance at this point
-        vec3 trans = exp(-absrp * rmStepSize);
-        radiance.rgb += emiss * (1.0 - trans) * transmittance.rgb;
-        transmittance.rgb *= trans;
+        if (grid[idx] != 0) {
+            // Smoother MIP calculation with better cascade blending
+            float mip = float(_cascadeIndex) + t / range; // Reduced blend range            
+            vec3 emiss = LINEAR(textureLod(_emissiveTex, uv, 0).rgb);
+            vec3 absrp = LINEAR(textureLod(_albedoTex, uv, 0).rgb);
+            
+            // Beer-Lambert law integration
+            vec3 trans = exp(-absrp * rmStepSize);
+            vec3 coeff = (1.0 - trans) / max(absrp, vec3(EPSILON));
+            radiance.rgb += emiss * coeff * transmittance.rgb;
+            transmittance.rgb *= trans;
+            
+            // Early termination if transmittance is negligible
+            if (all(lessThan(transmittance.rgb, vec3(0.01)))) break;
+        }        
     }
-
-    radiance = vec4(radiance.rgb, 1.0);
 }
 
 // [link("cascades")]
@@ -61,7 +72,7 @@ void raymarch(vec2 origin, vec2 delta, float range, out vec4 radiance, out vec4 
 
 //     // 
 //     const vec2 texel = 1.0 / _renderResolution;
-//     const float rmStepSize = 1.0; // results in some weird artifacting
+//     const float rmStepSize = pow(2, _cascadeIndex); // results in some weird artifacting
 //     const vec2 rmStepDelta = delta * rmStepSize * texel;
 //     const vec2 invDelta = sign(delta) / max(abs(delta), vec2(EPSILON));
 //     const float invRange = 1.0 / range;
@@ -89,7 +100,7 @@ void raymarch(vec2 origin, vec2 delta, float range, out vec4 radiance, out vec4 
 //         int idx = cell.x + cell.y * gridSize.x;
 
 //         // check axis
-//         vec2 mask = step(tMax, tMax.yx);
+//         vec2 mask = rmStepDelta(tMax, tMax.yx);
 //         float tNext = dot(tMax, mask);
 //         tMax += mask * tDelta;
 //         cell += ivec2(mask) * cellStep;
@@ -102,7 +113,7 @@ void raymarch(vec2 origin, vec2 delta, float range, out vec4 radiance, out vec4 
 
 //             // start march for this cell
 //             float marchLen = tExit - tEnter;
-//             int marchSteps = int(ceil(marchLen / rmStepSize)) + 1;
+//             float marchSteps = ceil(marchLen / rmStepSize) + 1;
 //             vec2 ray = (origin + delta * tEnter) * texel;
 //             for (int s = 0; s < marchSteps; s++) {
 //                 // bounds check
@@ -112,14 +123,14 @@ void raymarch(vec2 origin, vec2 delta, float range, out vec4 radiance, out vec4 
 
 //                 // sample emission and absorption textures
 //                 float mip = _cascadeIndex + min(1.0 - EPSILON, p * invRange);
-//                 vec3 emiss = LINEAR(textureLod(_emissiveTex, ray, 0).rgb);
-//                 vec3 absrp = LINEAR(textureLod(_albedoTex, ray, 0).rgb);
+//                 vec3 emiss = LINEAR(textureLod(_emissiveTex, ray, mip).rgb);
+//                 vec3 absrp = LINEAR(textureLod(_albedoTex, ray, mip).rgb);
 
 //                 // update radiance/transmittance at this point
-//                 vec3 trans = exp(-absrp);
-//                 radiance.rgb += emiss * (1.0 - trans) * transmittance.rgb;
+//                 vec3 trans = exp(-absrp * rmStepSize);
+//                 vec3 coeff = (1.0 - trans) / max(absrp, vec3(EPSILON));
+//                 radiance.rgb += emiss * coeff * transmittance.rgb;
 //                 transmittance.rgb *= trans;
-//                 ray += rmStepDelta;
 
 //                 // early exit if transmittance is too low
 //                 if (all(lessThan(transmittance.rgb, vec3(EPSILON))))
@@ -171,9 +182,9 @@ void raymarch(vec2 origin, vec2 delta, float range, out vec4 radiance, out vec4 
 //         radiance.rgb += emiss * (1.0 - trans) * transmittance.rgb;
 //         transmittance.rgb *= trans;
 
-//         // step ray
+//         // rmStepDelta ray
 //         {
-//             vec2 mask = step(cursor.sideDist, cursor.sideDist.yx);
+//             vec2 mask = rmStepDelta(cursor.sideDist, cursor.sideDist.yx);
 //             cursor.sideDist += mask * cursor.deltaDist;
 //             cursor.mapPos += mask * cursor.rayStep;
 //         }    
