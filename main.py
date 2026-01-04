@@ -1,4 +1,5 @@
 import random
+import time
 
 import pygame
 from pygame.locals import *
@@ -16,7 +17,7 @@ from toaster.registry.registry import Registry
 from toaster.physics.physics_rect import DYNAMIC
 
 # set the sizes
-render_size = (600, 480)
+render_size = (1200, 960)
 window_size = (1200, 960)
 Window(flags=HWACCEL, fps_cap=65, size=window_size)
 
@@ -27,7 +28,7 @@ AssetManager()
 InputHandler()
 PhysicsHandler()
 MapManager().set_map("test")
-Camera(1, [4, 6, 12, 20, 32], smoothing=3, origin=(160, 90))
+Camera(0, [1], smoothing=3, origin=(600, 480))
 Renderer(render_size=render_size)
 
 # TESTING
@@ -39,7 +40,7 @@ tests = []
 # collision test
 for i in range(200):
     test_rect = GameObject("test" + str(i), position=(48 + int(i / 10) * 12 + random.randint(-60, 60), int(i * -12) + i))
-    test_rect.attach_component(RectCollider((5, 5), DYNAMIC, 1, restitution=(0.4, 0.4), damping=(0.2, 0.2)))
+    test_rect.attach_component(RectCollider((random.randint(2, 15), random.randint(2, 15)), DYNAMIC, 1, restitution=(0.4, 0.4), damping=(0.2, 0.2)))
     test_rect = test_rect.get_component("rect_collider")
     test_rect._forces[1] = 320
     test_rect._velocity[0] = random.randint(-120, 120)
@@ -56,16 +57,17 @@ while 1:
     for i, test_rect in enumerate(tests):
         if test_rect.rect.top > 500:
             test_rect.transform.position = [random.randint(16, 450), random.randint(-150, -100)]
-        reg["renderer"].layers[1]['occlusion_surf'].fill(test_colours[i], (*reg["camera"].world_to_camera(1, test_rect.rect.topleft), *test_rect.rect.size))
+        reg["renderer"].layers[0]['albedo_surf'].fill((255, 255, 255), (*reg["camera"].world_to_camera(0, test_rect.rect.topleft), *test_rect.rect.size))
+        reg["renderer"].layers[0]['emissive_surf'].fill(test_colours[i], (*reg["camera"].world_to_camera(0, test_rect.rect.topleft), *test_rect.rect.size))
         avg[0] += test_rect.transform.position[0]
         avg[1] += test_rect.transform.position[1]
 
     avg[0] /= len(tests); avg[1] /= len(tests)
     reg["camera"].set_target(avg)
 
-    reg["renderer"].layers[1]['unlit_surf'].blit(reg['maps'].current_map.map_surf, reg["camera"].world_to_camera(1, (0, 0)))
-    reg.renderer.mark_dirty(1, 'unlit')
-    reg.renderer.mark_dirty(1, 'albedo')
+    reg["renderer"].layers[0]['albedo_surf'].blit(reg['maps'].current_map.map_surf, reg["camera"].world_to_camera(0, (0, 0)))
+    reg.renderer.mark_dirty(0, 'unlit')
+    reg.renderer.mark_dirty(0, 'albedo')
     reg["renderer"].render()
 
     print(reg["window"].fps)

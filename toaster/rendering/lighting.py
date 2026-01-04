@@ -16,7 +16,7 @@ class Lighting:
         self.renderer = renderer
 
         # gi properties
-        self.cascade_count: int = 6
+        self.cascade_count: int = 7
         self.cascade_scale: int = 1
         self.cascade_interval: float = 1
 
