@@ -13,7 +13,7 @@ void default_vert() {
 
 [shader('frag')]
 [resourceblock(
-    uniform sampler2D _tex;
+    uniform sampler2D _mainTex;
     uniform bool _flip;
 
     in vec2 v_uv;
@@ -21,5 +21,5 @@ void default_vert() {
 )]
 void default_frag() {
     vec2 uv = vec2(v_uv.x, (_flip) ? 1 - v_uv.y : v_uv.y);
-    fragColour = vec4(texture(_tex, uv).rgba);
+    fragColour = vec4(texture(_mainTex, uv).rgba);
 }

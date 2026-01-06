@@ -86,7 +86,7 @@ class Renderer(RegistryItem):
         self.default = self.create_screen_vao(self.shaders.get_shader('default').get_program('default')) # type: ignore
 
         # texture types we support
-        self.texture_types = ['albedo', 'occlusion', 'emissive', 'unlit']
+        self.texture_types = ['albedo', 'absorption', 'emissive', 'unlit']
         
         # create the layers
         self.layers = []
@@ -99,7 +99,7 @@ class Renderer(RegistryItem):
                 "tex_name": "layer_" + str(i),
 
                 "albedo_surf": pygame.Surface(self.render_size, pygame.SRCALPHA),
-                "occlusion_surf": pygame.Surface(self.render_size, pygame.SRCALPHA),
+                "absorption_surf": pygame.Surface(self.render_size, pygame.SRCALPHA),
                 "emissive_surf": pygame.Surface(self.render_size, pygame.SRCALPHA),
                 "unlit_surf": pygame.Surface(self.render_size, pygame.SRCALPHA),
 
@@ -107,7 +107,7 @@ class Renderer(RegistryItem):
                 "buffer": buf,
                 "dirty": {
                     "albedo": False,
-                    "occlusion": False,
+                    "absorption": False,
                     "emissive": False,
                     "unlit": False
                 }
@@ -131,7 +131,7 @@ class Renderer(RegistryItem):
             if not any(layer['dirty'].values()):
                 self.ctx.screen.use()
                 layer['texture'].use(0)
-                self.default.program['_tex'] = 0
+                self.default.program['_mainTex'] = 0
                 self.default.program['_flip'] = True
                 self.default.render()
                 continue
@@ -142,10 +142,10 @@ class Renderer(RegistryItem):
             
             # process lit texture
             if layer['dirty']['albedo'] or layer['dirty']['occlusion'] or layer['dirty']['emissive']:
-                self.lighting.render(layer['albedo_surf'], layer['occlusion_surf'], layer['emissive_surf'])
+                self.lighting.render(layer['albedo_surf'], layer['emissive_surf'], layer['absorption_surf'])
                 layer['emissive_surf'].fill(self.clear_colour)
                 layer['albedo_surf'].fill(self.clear_colour)
-                layer['occlusion_surf'].fill(self.clear_colour)
+                layer['absorption_surf'].fill(self.clear_colour)
                 layer['dirty']['albedo'] = layer['dirty']['occlusion'] = layer['dirty']['emissive'] = False
             
             # process unlit texture
@@ -156,7 +156,7 @@ class Renderer(RegistryItem):
                 self.render_texture.use(0)
                 
                 # set the texture of the program
-                self.default.program['_tex'] = 0
+                self.default.program['_mainTex'] = 0
                 
                 # disable flipping
                 self.default.program['_flip'] = False
@@ -169,6 +169,7 @@ class Renderer(RegistryItem):
                 layer['dirty']['unlit'] = False
             
             # ::: RENDER TO SCREEN
+            self.ctx.screen.use()
             # self.lighting.dist_buf.color_attachments[0].use(0)
             # self.lighting.jump_dbuf.current.tex.use(0)
             # self.lighting.albedo_tex.use(0)
@@ -176,15 +177,11 @@ class Renderer(RegistryItem):
             # self.lighting.occlusion_tex.use(0)
             self.lighting.gi_dbuf.next.tex().use(0)
             # self.lighting.diff_dbuf.next.tex().use(0)
-            self.default.program['_tex'] = 0
+            # self.lighting.rad_dbuf.current.tex().use(0)
+            self.default.program['_mainTex'] = 0
             self.default.program['_flip'] = False
             self.default.render()
 
-            self.ctx.screen.use()
-            layer['texture'].use(0)
-            self.default.program['_tex'] = 0
-            self.default.program['_flip'] = True
-            self.default.render()
     
     def create_screen_vao(
         self, program: mgl.Program

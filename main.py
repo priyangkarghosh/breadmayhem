@@ -66,6 +66,7 @@ while 1:
     reg["camera"].set_target(avg)
 
     reg["renderer"].layers[0]['albedo_surf'].blit(reg['maps'].current_map.map_surf, reg["camera"].world_to_camera(0, (0, 0)))
+    #reg["renderer"].layers[0]['emissive_surf'].blit(reg['maps'].current_map.map_surf, reg["camera"].world_to_camera(0, (0, 0)))
     reg.renderer.mark_dirty(0, 'unlit')
     reg.renderer.mark_dirty(0, 'albedo')
     reg["renderer"].render()

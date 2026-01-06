@@ -21,10 +21,10 @@ class Lighting:
         self.cascade_interval: float = 1
 
         # calculate cascade res
-        cc = 2 ** self.cascade_count
+        cc = float(2 ** (self.cascade_count - 1))
         self.cascade_resolution = (
-            int(ceil((self.renderer.render_size[0] / self.cascade_scale) / float(cc)) * cc),
-            int(ceil((self.renderer.render_size[1] / self.cascade_scale) / float(cc)) * cc)
+            int(ceil(self.renderer.render_size[0] / cc) * cc),
+            int(ceil(self.renderer.render_size[1] / cc) * cc)
         )
         
         # get lighting shader
@@ -33,13 +33,11 @@ class Lighting:
 
         # load programs from shader
         self.cascades = renderer.create_screen_vao(lighting_sh.get_program('cascades'))
-        self.diffuse = renderer.create_screen_vao(lighting_sh.get_program('diffuse'))
 
         # create render textures/buffers
         self.dist_tex = renderer.create_texture(swizzle='RGBA')
-        self.albedo_tex = renderer.create_texture(swizzle='RGBA') # these are BGRA bc of pygame
+        self.absorption_tex = renderer.create_texture(swizzle='RGBA') # these are BGRA bc of pygame
         self.emissive_tex = renderer.create_texture(swizzle='RGBA')
-        self.occlusion_tex = renderer.create_texture(swizzle='RGBA')
 
         self.diff_dbuf = DoubleTextureBuffer.create(renderer, swizzle='RGBA', size=self.cascade_resolution)
         self.gi_dbuf = DoubleTextureBuffer.create(
@@ -49,6 +47,13 @@ class Lighting:
             filter=(mgl.LINEAR, mgl.LINEAR),
             dtype='f2'
         )
+        # self.rad_dbuf = DoubleTextureBuffer.create(
+        #     renderer, 
+        #     size=self.cascade_resolution,
+        #     swizzle='RGBA', 
+        #     filter=(mgl.LINEAR, mgl.LINEAR),
+        #     dtype='f2'
+        # )
 
         # dda
         self.dda_kernel = renderer.shaders.get_shader('dda').get_kernel('dda')
@@ -59,13 +64,13 @@ class Lighting:
     def render(
         self, 
         albedo: pygame.Surface, 
-        occlusion: pygame.Surface, 
-        emissive: pygame.Surface
+        emissive: pygame.Surface,
+        absorption: pygame.Surface
     ) -> None:
         # set up textures
-        self.albedo_tex.write(albedo.get_view('1'))
-        self.albedo_tex.use(1)
-        self.albedo_tex.build_mipmaps()
+        self.absorption_tex.write(absorption.get_view('1'))
+        self.absorption_tex.use(1)
+        self.absorption_tex.build_mipmaps()
 
         self.emissive_tex.write(emissive.get_view('1'))
         self.emissive_tex.use(2)
@@ -74,12 +79,12 @@ class Lighting:
         # dda
         t = (ceil(self.renderer.render_size[0] / float(32)), ceil(self.renderer.render_size[1] / float(32)))
         self.dda_kernel.bind_ssbo("Grid", self.dda_buff)
-        self.dda_kernel.set_uniforms(_tex=1)
+        self.dda_kernel.set_uniforms(_mainTex=1)
         self.dda_kernel.dispatch(t[0], t[1])
         
         # cascades
         self.gi_dbuf.clear(a=1)
-        self.cascades.program['_tex'] = 0
+        self.cascades.program['_mainTex'] = 0
         self.cascades.program['_albedoTex'] = 1
         self.cascades.program['_emissiveTex'] = 2
 
@@ -96,6 +101,7 @@ class Lighting:
             self.gi_dbuf.next.tex().use(0) # next cascade
             self.cascades.render()
             self.gi_dbuf.flip()
+
         # for i in range(self.t, self.cascade_count):
         #     self.cascades.program['_cascadeIndex'] = i
 
@@ -111,7 +117,7 @@ class Lighting:
         # print('to render %d samples' % query.samples)
 
         # self.diff_dbuf.next.tex().use(0)
-        # self.diffuse.program['_tex'] = 0
+        # self.diffuse.program['_mainTex'] = 0
         # self.diff_dbuf.current.buf.use()
 
         # self.gi_dbuf.next.tex().use(1)

@@ -15,7 +15,7 @@ const float EPSILON = 1e-3;
     out vec2 v_uv;
 )]
 void default_vert() {
-    v_uv = vec2(texCoord.x, 1 - texCoord.y);
+    v_uv = vec2(texCoord.x, clamp(1.0 - texCoord.y, 0.0, 1.0));
     gl_Position = vec4(vert, 0.0, 1.0);
 }
 
@@ -59,92 +59,7 @@ void raymarch(vec2 origin, vec2 delta, float range, out vec4 radiance, out vec4 
                 transmittance.rgb = vec3(0.0);
                 return;
             }
-        }        
-    }
-}
-
-//[link("cascades")]
-void raymarch(vec2 origin, vec2 delta, float range, out vec4 radiance, out vec4 transmittance) {
-    // init default values
-    radiance = vec4(0.0, 0.0, 0.0, 1.0);
-    transmittance = vec4(1.0);
-
-    // 
-    const vec2 texel = 1.0 / _renderResolution;
-    const float rmStepSize = pow(2.0, _cascadeIndex - 2);
-    const vec2 rmStepDelta = delta * rmStepSize * texel;
-    const vec2 invDelta = sign(delta) / max(abs(delta), vec2(EPSILON));
-    const float invRange = 1.0 / range;
-
-    // set up dda
-    const vec2 cellSize = vec2(SUBGROUP_SIZE);
-    const ivec2 cellStep = ivec2(sign(delta));
-    const ivec2 gridSize = ivec2(ceil(_renderResolution / cellSize));
-    ivec2 cell = ivec2(floor(origin / cellSize));
-
-    // calculate next boundary for dda
-    vec2 nextBoundary;
-    nextBoundary.x = (float(cell.x) + float(max(0, cellStep.x))) * cellSize.x;
-    nextBoundary.y = (float(cell.y) + float(max(0, cellStep.y))) * cellSize.y;
-
-    // calculate distance along ray
-    vec2 tMax = abs((nextBoundary - origin) * invDelta);
-    vec2 tDelta = abs(cellSize * invDelta);
-
-    // dda loop
-    float t = 0.0;
-    while (t < range) {
-        // bounds check
-        if (cell.x < 0 || cell.y < 0 || cell.x >= gridSize.x || cell.y >= gridSize.y) return;
-        int idx = cell.x + cell.y * gridSize.x;
-
-        // check axis
-        float tNext;
-        if (tMax.x <= tMax.y) {
-            tNext = tMax.x;
-            tMax.x += tDelta.x;
-            cell.x += cellStep.x;
-        } else {
-            tNext = tMax.y;
-            tMax.y += tDelta.y;
-            cell.y += cellStep.y;
         }
-
-        // if cell is occupied, then raymarch
-        // -> skip otherwise
-        if (grid[idx] != 0) {
-            float tEnter = max(t, 0.0);
-            float tExit = min(tNext, range);
-
-            // start march for this cell
-            float marchLen = tExit - tEnter;
-            int marchSteps = int(ceil(marchLen / rmStepSize)) + 1;
-            vec2 ray = (origin + delta * tEnter) * texel;
-            for (int s = 0; s < marchSteps; s++) {
-                // bounds check
-                float p = tEnter + float(s) * rmStepSize;
-                if (ray.x < 0 || ray.y < 0 || ray.x > 1 || ray.y > 1 || p >= range) 
-                    return;
-
-                // sample emission and absorption textures
-                float mip = _cascadeIndex * 0.5 + min(1.0 - EPSILON, p * invRange);
-                vec3 emiss = LINEAR(textureLod(_emissiveTex, ray, mip).rgb);
-                vec3 absrp = LINEAR(textureLod(_albedoTex, ray, mip).rgb);
-
-                // update radiance/transmittance at this point
-                vec3 trans = exp(-absrp * rmStepSize);
-                vec3 coeff = mix(vec3(rmStepSize), 1.0 - trans, step(vec3(EPSILON), absrp));
-                radiance.rgb += emiss * coeff * transmittance.rgb;
-                transmittance.rgb *= trans;
-                ray += rmStepDelta;
-
-                // early exit if transmittance is too low
-                if (all(lessThan(transmittance.rgb, vec3(EPSILON))))
-                    return;
-            }
-        }
-
-        t = tNext;
     }
 }
 
@@ -159,20 +74,20 @@ void getBilinearProbes(vec2 probe, out vec2 probes[4]) {
 
 [link('cascades')]
 vec4 merge(vec4 radiance, vec4 transmittance, float index, vec2 probe) {
-	if (_cascadeIndex >= _cascadeCount - 1.0) return radiance;
+	if (_cascadeIndex >= _cascadeCount - 1) return radiance;
     
 	float angularN1 = 1 << (_cascadeIndex + 1);
 	vec2 extentN1 = floor(_cascadeResolution / angularN1);
 
 	vec2 interpN1 = vec2(mod(index, angularN1), floor(index / angularN1)) * extentN1;
     interpN1 += clamp(probe + 0.5, vec2(0.5), extentN1 - vec2(0.5));
-	vec4 mergeRadiance = texture(_tex, interpN1 / _cascadeResolution);
+	vec4 mergeRadiance = texture(_mainTex, interpN1 / _cascadeResolution);
 	return radiance + mergeRadiance * transmittance;
 }
 
 [shader('frag')]
 [resourceblock(
-    uniform sampler2D _tex;
+    uniform sampler2D _mainTex;
     uniform sampler2D _albedoTex;
     uniform sampler2D _emissiveTex;
 
@@ -198,7 +113,7 @@ void cascades() {
     vec2 linearN1 = vec2(_cascadeScale * pow(2.0, _cascadeIndex + 1.0));
     
     float pow4 = floor(1 << (2 * _cascadeIndex));
-    float offset = _cascadeInterval * ((1.0 - pow4) / -3);
+    float offset = _cascadeInterval * ((1.0 - pow4) / -3.0);
     float range = _cascadeInterval * pow4;
 
     // screen space ray origin
@@ -243,16 +158,24 @@ void cascades() {
 		fragColour += mix(top, bot, weight.y) * 0.25;
 	}
 	
-    if (_cascadeIndex == 0) {
-        fragColour = vec4(SRGB(fragColour.rgb), 1.0);
-        // if (int(mod(gl_FragCoord.x, 32)) == 0 || int(mod(gl_FragCoord.y, 32)) == 0)
-        //     fragColour = vec4(1.0, 0, 0, 1.0);
-    }
+    if (_cascadeIndex == 0) fragColour = vec4(SRGB(fragColour.rgb), 1.0);
 }
 
 [shader('frag')]
 [resourceblock(
-    uniform sampler2D _tex;
+    uniform sampler2D _mainTex;
+    uniform sampler2D _radianceTex;
+    uniform vec2 _cascadeResolution;
+
+    in vec2 v_uv;
+    out vec4 fragColour;
+)]
+void blit() {
+}
+
+[shader('frag')]
+[resourceblock(
+    uniform sampler2D _mainTex;
     uniform sampler2D _occlusionTex;
     uniform sampler2D _radianceTex;
     uniform vec2 _renderResolution;
@@ -262,7 +185,7 @@ void cascades() {
 )]
 void diffuse() {
     const float SCATTER_COEFF = 1.5;
-    vec3 fin = texture(_tex, v_uv).rgb * 0.3;
+    vec3 fin = texture(_mainTex, v_uv).rgb * 0.3;
     float t = texture(_occlusionTex, v_uv).r;
     if (t >= EPSILON) fin += texture(_radianceTex, v_uv).rgb * SCATTER_COEFF * 0.7;
     fragColour.rgb = fin;

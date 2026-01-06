@@ -48,13 +48,15 @@ while 1:
     reg["camera"].update()
 
 
-    #vtest()
+    # vtest()
     # pygame.draw.circle(reg["renderer"].layers[0]['emissive_surf'], (255, 255, 255), (400, 225), 4)
     # pygame.draw.circle(reg["renderer"].layers[0]['albedo_surf'], (255, 255, 255), (400, 225), 4)
     mp = list(reg.inputs.mouse_pos)
+    print(mp)
     # mp[0] *= 0.5; mp[1] *= 0.5
     pygame.draw.circle(reg["renderer"].layers[0]['emissive_surf'], (255, 255, 255), mp, 8)
-    pygame.draw.circle(reg["renderer"].layers[0]['albedo_surf'], (255, 255, 255), mp, 8)
+    pygame.draw.circle(reg["renderer"].layers[0]['absorption_surf'], (255, 255, 255), mp, 8)
+    
     reg.renderer.mark_dirty(0, 'unlit')
     reg.renderer.mark_dirty(0, 'albedo')
     reg["renderer"].render()
