@@ -33,9 +33,10 @@ class Lighting:
 
         # load programs from shader
         self.cascades = renderer.create_screen_vao(lighting_sh.get_program('cascades'))
+        self.blit = renderer.create_screen_vao(lighting_sh.get_program('blit'))
 
         # create render textures/buffers
-        self.dist_tex = renderer.create_texture(swizzle='RGBA')
+        self.albedo_tex = renderer.create_texture(swizzle='RGBA') # these are BGRA bc of pygame
         self.absorption_tex = renderer.create_texture(swizzle='RGBA') # these are BGRA bc of pygame
         self.emissive_tex = renderer.create_texture(swizzle='RGBA')
 
@@ -47,13 +48,6 @@ class Lighting:
             filter=(mgl.LINEAR, mgl.LINEAR),
             dtype='f2'
         )
-        # self.rad_dbuf = DoubleTextureBuffer.create(
-        #     renderer, 
-        #     size=self.cascade_resolution,
-        #     swizzle='RGBA', 
-        #     filter=(mgl.LINEAR, mgl.LINEAR),
-        #     dtype='f2'
-        # )
 
         # dda
         self.dda_kernel = renderer.shaders.get_shader('dda').get_kernel('dda')
@@ -68,25 +62,28 @@ class Lighting:
         absorption: pygame.Surface
     ) -> None:
         # set up textures
-        self.absorption_tex.write(absorption.get_view('1'))
-        self.absorption_tex.use(1)
-        self.absorption_tex.build_mipmaps()
+        self.albedo_tex.write(albedo.get_view('1'))
+        self.albedo_tex.use(0)
 
         self.emissive_tex.write(emissive.get_view('1'))
-        self.emissive_tex.use(2)
+        self.emissive_tex.use(1)
         self.emissive_tex.build_mipmaps()
-        
+
+        self.absorption_tex.write(absorption.get_view('1'))
+        self.absorption_tex.use(2)
+        self.absorption_tex.build_mipmaps()
+
         # dda
         t = (ceil(self.renderer.render_size[0] / float(32)), ceil(self.renderer.render_size[1] / float(32)))
         self.dda_kernel.bind_ssbo("Grid", self.dda_buff)
-        self.dda_kernel.set_uniforms(_mainTex=1)
+        self.dda_kernel.set_uniforms(_mainTex=0)
         self.dda_kernel.dispatch(t[0], t[1])
         
         # cascades
         self.gi_dbuf.clear(a=1)
         self.cascades.program['_mainTex'] = 0
-        self.cascades.program['_albedoTex'] = 1
-        self.cascades.program['_emissiveTex'] = 2
+        self.cascades.program['_emissiveTex'] = 1
+        self.cascades.program['_absorptionTex'] = 2
 
         self.cascades.program['_renderResolution'] = self.renderer.render_size
         self.cascades.program['_cascadeResolution'] = self.cascade_resolution
@@ -101,6 +98,15 @@ class Lighting:
             self.gi_dbuf.next.tex().use(0) # next cascade
             self.cascades.render()
             self.gi_dbuf.flip()
+        self.gi_dbuf.flip()
+
+        self.renderer.ctx.screen.use()
+        self.albedo_tex.use(0)
+        self.gi_dbuf.current.tex().use(1)
+        # self.blit.program['_mainTex'] = 0
+        self.blit.program['_radianceTex'] = 1
+        self.blit.program['_renderResolution'] = self.renderer.render_size
+        self.blit.render()
 
         # for i in range(self.t, self.cascade_count):
         #     self.cascades.program['_cascadeIndex'] = i

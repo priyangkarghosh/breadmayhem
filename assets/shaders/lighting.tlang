@@ -1,5 +1,6 @@
 [include(dda)]
 [program('cascades', vert='default_vert', frag='cascades')]
+[program('blit', vert='default_vert', frag='blit')]
 [program('diffuse', vert='default_vert', frag='diffuse')]
 
 const float TAU = 6.28318530718;
@@ -46,7 +47,7 @@ void raymarch(vec2 origin, vec2 delta, float range, out vec4 radiance, out vec4 
         if (grid[idx] != 0) {
             float mip = float(_cascadeIndex) * 0.5 + (t / range);    
             vec3 emiss = LINEAR(textureLod(_emissiveTex, uv, mip).rgb);
-            vec3 absrp = LINEAR(textureLod(_albedoTex, uv, mip).rgb);
+            vec3 absrp = LINEAR(textureLod(_absorptionTex, uv, mip).rgb);
             
             // beer-lambert law integration
             vec3 trans = exp(-absrp * rmStepSize);
@@ -88,8 +89,8 @@ vec4 merge(vec4 radiance, vec4 transmittance, float index, vec2 probe) {
 [shader('frag')]
 [resourceblock(
     uniform sampler2D _mainTex;
-    uniform sampler2D _albedoTex;
     uniform sampler2D _emissiveTex;
+    uniform sampler2D _absorptionTex;
 
     uniform vec2 _renderResolution;
     uniform vec2 _cascadeResolution;
@@ -163,14 +164,19 @@ void cascades() {
 
 [shader('frag')]
 [resourceblock(
-    uniform sampler2D _mainTex;
+    uniform sampler2D _mainTex; // albedo
     uniform sampler2D _radianceTex;
-    uniform vec2 _cascadeResolution;
+    uniform vec2 _renderResolution;
 
     in vec2 v_uv;
     out vec4 fragColour;
 )]
 void blit() {
+    vec2 uv = vec2(v_uv.x, 1.0 - v_uv.y);
+    vec4 albedo = texture(_mainTex, uv);
+    ivec2 radCoord = ivec2(uv * _renderResolution);
+    vec4 radiance = texelFetch(_radianceTex, radCoord, 0);
+    fragColour = radiance;
 }
 
 [shader('frag')]
