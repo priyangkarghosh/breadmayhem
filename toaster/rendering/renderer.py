@@ -141,7 +141,7 @@ class Renderer(RegistryItem):
             layer['buffer'].use()
             
             # process lit texture
-            if layer['dirty']['albedo'] or layer['dirty']['occlusion'] or layer['dirty']['emissive']:
+            if layer['dirty']['albedo'] or layer['dirty']['absorption'] or layer['dirty']['emissive']:
                 self.lighting.render(layer['albedo_surf'], layer['emissive_surf'], layer['absorption_surf'])
                 layer['emissive_surf'].fill(self.clear_colour)
                 layer['albedo_surf'].fill(self.clear_colour)
@@ -151,7 +151,8 @@ class Renderer(RegistryItem):
             # process unlit texture
             if layer['dirty']['unlit']:
                 # write the unlit surface to the render_texture
-                layer['buffer'].use()
+                # layer['buffer'].use()
+                self.ctx.screen.use()
                 self.render_texture.write(layer['unlit_surf'].get_view('1'))
                 self.render_texture.use(0)
                 
@@ -175,7 +176,7 @@ class Renderer(RegistryItem):
             # # self.lighting.albedo_tex.use(0)
             # # self.lighting.emissive_tex.use(0)
             # # self.lighting.occlusion_tex.use(0)
-            # self.lighting.gi_dbuf.next.tex().use(0)
+            # # self.lighting.gi_dbuf.current.tex().use(0)
             # # self.lighting.diff_dbuf.next.tex().use(0)
             # # self.lighting.rad_dbuf.current.tex().use(0)
             # self.default.program['_mainTex'] = 0

@@ -46,7 +46,7 @@ void raymarch(vec2 origin, vec2 delta, float range, out vec4 radiance, out vec4 
         int idx = cell.x + cell.y * gridSize.x;
         if (grid[idx] != 0) {
             float mip = float(_cascadeIndex) * 0.5 + (t / range);    
-            vec3 emiss = LINEAR(textureLod(_emissiveTex, uv, mip).rgb);
+            vec3 emiss = LINEAR(textureLod(_emissiveTex, uv, mip).rgb + texture(_diffuseTex, uv).rgb);
             vec3 absrp = LINEAR(textureLod(_absorptionTex, uv, mip).rgb);
             
             // beer-lambert law integration
@@ -91,6 +91,7 @@ vec4 merge(vec4 radiance, vec4 transmittance, float index, vec2 probe) {
     uniform sampler2D _mainTex;
     uniform sampler2D _emissiveTex;
     uniform sampler2D _absorptionTex;
+    uniform sampler2D _diffuseTex;
 
     uniform vec2 _renderResolution;
     uniform vec2 _cascadeResolution;
@@ -166,6 +167,7 @@ void cascades() {
 [resourceblock(
     uniform sampler2D _mainTex; // albedo
     uniform sampler2D _radianceTex;
+    uniform sampler2D _radianceTex2;
     uniform vec2 _renderResolution;
 
     in vec2 v_uv;
@@ -175,14 +177,15 @@ void blit() {
     vec2 uv = vec2(v_uv.x, 1.0 - v_uv.y);
     vec4 albedo = texture(_mainTex, uv);
     ivec2 radCoord = ivec2(uv * _renderResolution);
-    vec4 radiance = texelFetch(_radianceTex, radCoord, 0);
-    fragColour = radiance;
+    vec4 radiance1 = texelFetch(_radianceTex, radCoord, 0);
+    vec4 radiance2 = texelFetch(_radianceTex2, radCoord, 0);
+    fragColour = radiance1 + radiance2;
 }
 
 [shader('frag')]
 [resourceblock(
-    uniform sampler2D _mainTex;
-    uniform sampler2D _occlusionTex;
+    uniform sampler2D _mainTex; // prev diffuse
+    uniform sampler2D _albedoTex;
     uniform sampler2D _radianceTex;
     uniform vec2 _renderResolution;
 
@@ -190,9 +193,8 @@ void blit() {
     out vec4 fragColour;
 )]
 void diffuse() {
-    const float SCATTER_COEFF = 1.5;
-    vec3 fin = texture(_mainTex, v_uv).rgb * 0.3;
-    float t = texture(_occlusionTex, v_uv).r;
-    if (t >= EPSILON) fin += texture(_radianceTex, v_uv).rgb * SCATTER_COEFF * 0.7;
-    fragColour.rgb = fin;
+    vec3 albedo = texture(_albedoTex, v_uv).rgb;
+    ivec2 radCoord = ivec2(v_uv * _renderResolution);
+    vec3 diffuse = albedo * texelFetch(_radianceTex, radCoord, 0).rgb;
+    fragColour = mix(texture(_mainTex, v_uv), vec4(diffuse, 1.0), 0.5);
 }

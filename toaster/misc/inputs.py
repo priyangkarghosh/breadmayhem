@@ -33,6 +33,7 @@ class InputHandler(RegistryItem):
             self.inputs["button"][key_code] = MouseInputState()
 
         self.mouse_pos = (0, 0)
+        self.mouse_scroll = 0
         pygame.event.set_allowed(VALID_EVENTS)
 
     def __getitem__(self, key):
@@ -42,6 +43,7 @@ class InputHandler(RegistryItem):
     def update(self):
         # update mouse position
         self.mouse_pos = pygame.mouse.get_pos()
+        self.mouse_scroll = 0
 
         # process events
         for event in pygame.event.get():
@@ -63,6 +65,9 @@ class InputHandler(RegistryItem):
             if event.type == MOUSEBUTTONUP:
                 button = self.inputs["button"].get(event.button)
                 if button: button.unpress()
+
+            if event.type == pygame.MOUSEWHEEL:
+                self.mouse_scroll = event.y
 
 
 class InputState:
