@@ -57,7 +57,7 @@ while 1:
     for i, test_rect in enumerate(tests):
         if test_rect.rect.top > 500:
             test_rect.transform.position = [random.randint(16, 450), random.randint(-150, -100)]
-        reg["renderer"].layers[0]['albedo_surf'].fill((255, 255, 255), (*reg["camera"].world_to_camera(0, test_rect.rect.topleft), *test_rect.rect.size))
+        reg["renderer"].layers[0]['albedo_surf'].fill((1, 1, 1), (*reg["camera"].world_to_camera(0, test_rect.rect.topleft), *test_rect.rect.size))
         reg["renderer"].layers[0]['emissive_surf'].fill(test_colours[i], (*reg["camera"].world_to_camera(0, test_rect.rect.topleft), *test_rect.rect.size))
         reg["renderer"].layers[0]['absorption_surf'].fill((255, 255, 255), (*reg["camera"].world_to_camera(0, test_rect.rect.topleft), *test_rect.rect.size))
         avg[0] += test_rect.transform.position[0]
@@ -70,12 +70,12 @@ while 1:
     reg["renderer"].layers[0]['absorption_surf'].blit(reg['maps'].current_map.map_surf, reg["camera"].world_to_camera(0, (0, 0)))
 
     mp = list(reg.inputs.mouse_pos)
-    pygame.draw.circle(reg["renderer"].layers[0]['albedo_surf'], (255, 255, 255), mp, 8)
+    pygame.draw.circle(reg["renderer"].layers[0]['albedo_surf'], (1, 1, 1), mp, 8)
     pygame.draw.circle(reg["renderer"].layers[0]['emissive_surf'], (255, 255, 255), mp, 8)
     pygame.draw.circle(reg["renderer"].layers[0]['absorption_surf'], (255, 255, 255), mp, 8)
 
     #reg["renderer"].layers[0]['emissive_surf'].blit(reg['maps'].current_map.map_surf, reg["camera"].world_to_camera(0, (0, 0)))
-    reg.renderer.mark_dirty(0, 'unlit')
+    #reg.renderer.mark_dirty(0, 'unlit')
     reg.renderer.mark_dirty(0, 'albedo')
     reg["renderer"].render()
     pygame.display.set_caption(str(reg.window.fps))

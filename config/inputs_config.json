@@ -1,8 +1,6 @@
 {
   "keyboard": {
-      "move_right": "d",
-      "crouch": "left shift",
-      "jump": "space"
+    "enable": "e"
   },
 
   "mouse-button": {

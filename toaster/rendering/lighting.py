@@ -40,17 +40,10 @@ class Lighting:
         self.albedo_tex = renderer.create_texture(swizzle='RGBA') # these are BGRA bc of pygame
         self.absorption_tex = renderer.create_texture(swizzle='RGBA') # these are BGRA bc of pygame
         self.emissive_tex = renderer.create_texture(swizzle='RGBA')
+        self.test_tex = renderer.ctx.framebuffer(color_attachments=[renderer.create_texture(swizzle='RGBA')])
 
         self.diff_dbuf = DoubleTextureBuffer.create(renderer, swizzle='RGBA', size=self.renderer.render_size)
         self.gi_dbuf = DoubleTextureBuffer.create(
-            renderer, 
-            size=self.cascade_resolution,
-            swizzle='RGBA', 
-            filter=(mgl.LINEAR, mgl.LINEAR),
-            dtype='f2'
-        )
-
-        self.gi_dbuf2 = DoubleTextureBuffer.create(
             renderer, 
             size=self.cascade_resolution,
             swizzle='RGBA', 
@@ -63,6 +56,7 @@ class Lighting:
         self.dda_buff = self.renderer.ctx.buffer(reserve=(4 * (ceil(self.renderer.render_size[0] / float(32)) * ceil(self.renderer.render_size[1] / float(32)))))
 
         self.t = 0
+        self.c = 0
 
     def render(
         self, 
@@ -113,19 +107,24 @@ class Lighting:
         self.gi_dbuf.flip()
 
         # diffuse
-        self.diff_dbuf.next.tex().use(0)
-        self.diffuse.program['_mainTex'] = 0
-        self.diff_dbuf.current.buf.use()
+        for i in range(5):
+            self.diff_dbuf.next.tex().use(0)
+            self.diffuse.program['_mainTex'] = 0
+            self.diff_dbuf.current.buf.use()
 
-        self.albedo_tex.use(1)
-        self.diffuse.program['_albedoTex'] = 1
+            self.albedo_tex.use(1)
+            self.diffuse.program['_albedoTex'] = 1
 
-        self.gi_dbuf.current.tex().use(2)
-        self.diffuse.program['_radianceTex'] = 2
-
-        self.diffuse.program['_renderResolution'] = self.renderer.render_size
-        self.diffuse.render()
-        self.diff_dbuf.flip()
+            if self.c % 15 == 0: 
+                self.test_tex.clear()
+                self.test_tex.color_attachments[0].use(2) # type: ignore
+            else: self.gi_dbuf.current.tex().use(2)
+            self.c += 1
+            
+            self.diffuse.program['_radianceTex'] = 2
+            self.diffuse.program['_renderResolution'] = self.renderer.render_size
+            self.diffuse.render()
+            self.diff_dbuf.flip()
 
         self.display()
 
@@ -133,9 +132,7 @@ class Lighting:
         self.renderer.ctx.screen.use()
         self.albedo_tex.use(0)
         self.gi_dbuf.current.tex().use(1)
-        self.gi_dbuf2.current.tex().use(2)
         # self.blit.program['_mainTex'] = 0
         self.blit.program['_radianceTex'] = 1
-        self.blit.program['_radianceTex2'] = 2
         self.blit.program['_renderResolution'] = self.renderer.render_size
         self.blit.render()
