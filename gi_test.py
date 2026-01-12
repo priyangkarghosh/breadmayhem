@@ -95,40 +95,43 @@ while 1:
     reg["camera"].update()
 
     # vtest()
-    pygame.draw.circle(reg["renderer"].layers[0]['absorption_surf'], (255, 255, 255), (200, 225), 32)
-    pygame.draw.circle(reg["renderer"].layers[0]['albedo_surf'], (1, 1, 1), (200, 225), 32)
+    # pygame.draw.circle(reg["renderer"].layers[0]['absorption_surf'], (255, 255, 255), (200, 225), 32)
+    # pygame.draw.circle(reg["renderer"].layers[0]['albedo_surf'], (1, 1, 1), (200, 225), 32)
 
-    pygame.draw.circle(reg["renderer"].layers[0]['absorption_surf'], (255, 255, 255), (600, 225), 32)
-    pygame.draw.circle(reg["renderer"].layers[0]['albedo_surf'], (1, 1, 1), (600, 225), 32)
+    # pygame.draw.circle(reg["renderer"].layers[0]['absorption_surf'], (255, 255, 255), (600, 225), 32)
+    # pygame.draw.circle(reg["renderer"].layers[0]['albedo_surf'], (1, 1, 1), (600, 225), 32)
 
-    pygame.draw.line(reg["renderer"].layers[0]['absorption_surf'], (255, 255, 255), (400, 0), (400, 200), 15)
-    pygame.draw.line(reg["renderer"].layers[0]['absorption_surf'], (255, 255, 255), (400, 250), (400, 450), 15)
-    pygame.draw.line(reg["renderer"].layers[0]['albedo_surf'], (1, 1, 1), (400, 0), (400, 200), 15)
-    pygame.draw.line(reg["renderer"].layers[0]['albedo_surf'], (1, 1, 1), (400, 250), (400, 450), 15)
+    # pygame.draw.line(reg["renderer"].layers[0]['absorption_surf'], (255, 255, 255), (400, 0), (400, 200), 15)
+    # pygame.draw.line(reg["renderer"].layers[0]['absorption_surf'], (255, 255, 255), (400, 250), (400, 450), 15)
+    # pygame.draw.line(reg["renderer"].layers[0]['albedo_surf'], (1, 1, 1), (400, 0), (400, 200), 15)
+    # pygame.draw.line(reg["renderer"].layers[0]['albedo_surf'], (1, 1, 1), (400, 250), (400, 450), 15)
 
-    # pygame.draw.rect(reg["renderer"].layers[0]['absorption_surf'], (255, 255, 255), (0, 0, 800, 450), 15)
-    # pygame.draw.rect(reg["renderer"].layers[0]['albedo_surf'], (t, t, t), (0, 0, 800, 450), 15)
-    draw_rect_sides(
-        reg["renderer"].layers[0]['absorption_surf'],
-        (0, 0, 800, 450),
-        [(255,255,255), (255,255,255), (255,255,255), (255,255,255)],
-        15
-    )
+    # # pygame.draw.rect(reg["renderer"].layers[0]['absorption_surf'], (255, 255, 255), (0, 0, 800, 450), 15)
+    # # pygame.draw.rect(reg["renderer"].layers[0]['albedo_surf'], (t, t, t), (0, 0, 800, 450), 15)
+    # draw_rect_sides(
+    #     reg["renderer"].layers[0]['absorption_surf'],
+    #     (0, 0, 800, 450),
+    #     [(255,255,255), (255,255,255), (255,255,255), (255,255,255)],
+    #     15
+    # )
 
-    draw_rect_sides(
-        reg["renderer"].layers[0]['albedo_surf'],
-        (0, 0, 800, 450),
-        [(t,0,0), (t,0,0), (0,0,t), (0,0,t)],
-        15
-    )
+    # draw_rect_sides(
+    #     reg["renderer"].layers[0]['albedo_surf'],
+    #     (0, 0, 800, 450),
+    #     [(t,0,0), (t,0,0), (0,0,t), (0,0,t)],
+    #     15
+    # )
 
-    if not reg.inputs['enable'].pressed:
-        mp = list(reg.inputs.mouse_pos)
-        mp[0] *= 0.5; mp[1] *= 0.5
-        pygame.draw.circle(reg["renderer"].layers[0]['albedo_surf'], (1, 1, 1), mp, 8)
-        pygame.draw.circle(reg["renderer"].layers[0]['emissive_surf'], (255, 255, 255), mp, 8)
-        pygame.draw.circle(reg["renderer"].layers[0]['absorption_surf'], (255, 255, 255), mp, 8)
-    
+    # if not reg.inputs['enable'].pressed:
+    #     mp = list(reg.inputs.mouse_pos)
+    #     mp[0] *= 0.5; mp[1] *= 0.5
+    #     pygame.draw.circle(reg["renderer"].layers[0]['albedo_surf'], (1, 1, 1), mp, 8)
+    #     pygame.draw.circle(reg["renderer"].layers[0]['emissive_surf'], (255, 255, 255), mp, 8)
+    #     pygame.draw.circle(reg["renderer"].layers[0]['absorption_surf'], (255, 255, 255), mp, 8)
+
+    pygame.draw.circle(reg["renderer"].layers[0]['emissive_surf'], (255, 255, 255), (400, 225), 4)
+    pygame.draw.circle(reg["renderer"].layers[0]['absorption_surf'], (255, 255, 255), (400, 225), 4)
+
     if reg.inputs.mouse_scroll != 0:
         t += 5 * reg.inputs.mouse_scroll
         t = max(0, min(250, t))

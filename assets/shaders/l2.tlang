@@ -1,0 +1,116 @@
+[extend!('subgroup')]
+[program('blit', vert='default_vert', frag='blit')]
+
+[shader('vert')]
+[resourceblock(
+    in vec2 vert;
+    in vec2 texCoord;
+    out vec2 v_uv;
+)]
+void default_vert() {
+    v_uv = vec2(texCoord.x, clamp(1.0 - texCoord.y, 0.0, 1.0));
+    gl_Position = vec4(vert, 0.0, 1.0);
+}
+
+[shader('frag')]
+[resourceblock(
+    uniform int _cascadeIndex;
+    uniform sampler2DArray _cascadeTex;
+
+    in vec2 v_uv;
+    out vec4 fragColour;
+)]
+void blit() {
+    vec3 uv = vec3(v_uv.x, 1.0 - v_uv.y, _cascadeIndex);
+    fragColour = texture(_cascadeTex, uv);
+}
+
+const float TAU = 6.28318530718;
+const float EPSILON = 1e-3;
+
+#define SRGB(c) pow(c.rgb, vec3(1.0 / 2.2))
+#define LINEAR(c) pow(c.rgb, vec3(2.2))
+
+[link('build_cascade')]
+void raymarch(vec2 origin, vec2 delta, float range, out vec4 radiance, out vec4 transmittance) {
+    radiance = vec4(0.0, 0.0, 0.0, 1.0);
+    transmittance = vec4(1.0);
+    
+    const vec2 texel = 1.0 / _renderResolution;
+    
+    vec2 ray = origin * texel;
+    vec2 rayStep = delta * texel;
+    for (float i = 0.0; i < range; i++) {
+        ray += rayStep;
+        if (floor(ray) != vec2(0.0)) return;
+
+        vec3 emiss = LINEAR(texture(_emissiveTex, ray).rgb);
+        vec3 absrp = LINEAR(texture(_absorptionTex, ray).rgb);
+        
+        // beer-lambert law integration
+        vec3 trans = exp(-absrp);
+        radiance.rgb += emiss * (1.0 - trans) * transmittance.rgb;
+        transmittance.rgb *= trans;
+        
+        // early termination if transmittance is negligible
+        if (all(lessThan(transmittance.rgb, vec3(EPSILON)))) {
+            transmittance.rgb = vec3(0.0);
+            return;
+        }
+    }
+}
+
+// workgroups in format:
+// wg.x = cascade_size.x, wg.y = cascade_size.y
+[shader('compute'), numthreads(1, 1, 1)]
+[resourceblock(
+    layout(rgba16f, binding=0) uniform writeonly image2DArray _cascadeTex;
+
+    uniform sampler2D _emissiveTex;
+    uniform sampler2D _absorptionTex;
+
+    uniform ivec2 _renderResolution;
+    uniform ivec2 _cascadeResolution;
+
+    uniform int _cascadeIndex;
+    uniform int _cascadeCount;
+    uniform float _cascadeScale;
+    uniform float _cascadeInterval;
+)]
+void build_cascade() {
+    // calculate texcoord
+    ivec3 texCoord = ivec3(gl_GlobalInvocationID.xy, _cascadeIndex);
+
+    //    
+    float sqrtAngular = floor(1 << _cascadeIndex);
+    float angular = floor(sqrtAngular * sqrtAngular * 4);
+    ivec2 extent = ivec2(floor(_cascadeResolution / sqrtAngular));
+    ivec4 probe = ivec4(mod(texCoord.xy, extent), floor(texCoord.xy / extent));
+    vec2 linear = vec2(_cascadeScale * sqrtAngular);
+
+    //
+    float pow4 = floor(1 << (2 * _cascadeIndex));
+    float offset = _cascadeInterval * ((1.0 - pow4) / -3.0);
+    float range = _cascadeInterval * pow4;
+    
+    //
+    int base = int(probe.z + (probe.w * sqrtAngular)) * 4;
+    float angleStep = TAU / angular;
+
+    vec4 accum = vec4(0);
+	for (float i = 0; i < 4; i++) {
+        float index = base + i;
+        float theta = (index + 0.5) * angleStep;
+
+        //
+        vec2 origin = (probe.xy + 0.5) * linear;
+        vec2 delta = vec2(cos(theta), -sin(theta));
+
+        //
+        vec4 radiance, transmittance;
+        raymarch(origin + delta * offset, delta, range, radiance, transmittance);
+        accum += radiance * 0.25;
+    }
+    
+    imageStore(_cascadeTex, texCoord, accum);
+}
