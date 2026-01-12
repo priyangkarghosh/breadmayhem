@@ -208,15 +208,8 @@ void blit() {
     
     // Bilinear interpolation
     vec3 fluence = mix(mix(S0.rgb, S1.rgb, w.x), mix(S2.rgb, S3.rgb, w.x), w.y);
-    fragColour = vec4(fluence, 1.0);
-    
-    // Apply albedo
-    //fluence *= albedo.rgb;
-    
-    // Tonemap (inverse reinhard-style with gamma 2.5)
-    // vec3 color = 1.0 - 1.0 / pow(1.0 + fluence, vec3(2.5));
-    
-    // fragColour = vec4(color, 1.0);
+    const vec3 W = vec3(0.2125, 0.7154, 0.0721);
+    fragColour = vec4(mix(vec3(dot(fluence, W)), fluence, 1.5), 1.0);
 }
 
 [shader('frag')]
@@ -230,12 +223,22 @@ void blit() {
     out vec4 fragColour;
 )]
 void diffuse() {
-    vec3 albedo = texture(_albedoTex, v_uv).rgb;
+    vec3 albedo = LINEAR(texture(_albedoTex, v_uv).rgb);
     ivec2 radCoord = ivec2(v_uv * _renderResolution);
-    vec3 radiance = texelFetch(_radianceTex, radCoord, 0).rgb;
+    vec3 radiance = LINEAR(texelFetch(_radianceTex, radCoord, 0).rgb);
     vec3 diffuse = albedo * radiance;
 
-    // Exponential moving average with decay
-    vec3 prevDiffuse = texture(_mainTex, v_uv).rgb;
-    fragColour = vec4(mix(prevDiffuse, diffuse, 0.3), 1.0);
+    vec3 prevDiffuse = LINEAR(texture(_mainTex, v_uv).rgb);
+    
+    float diffMag = length(diffuse - prevDiffuse);
+
+    float tauSmall = 4.0;   // fast for small changes
+    float tauLarge = 20.0;  // slow for big changes
+
+    float w = clamp(diffMag * 2.0, 0.0, 1.0);
+    float tau = mix(tauSmall, tauLarge, w);
+
+    float alpha = 1.0 - exp(-1.0 / tau);
+    vec3 result = mix(prevDiffuse, diffuse, alpha);
+    fragColour = vec4(SRGB(result), 1.0);
 }
