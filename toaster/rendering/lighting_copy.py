@@ -33,6 +33,7 @@ class Lighting:
 
         # load programs from shader
         self.build = lighting_sh.get_kernel('build_cascade')
+        self.merge = lighting_sh.get_kernel('merge_cascades')
         self.blit = renderer.create_screen_vao(lighting_sh.get_program('blit'))
 
         # create render textures/buffers
@@ -43,6 +44,7 @@ class Lighting:
             size=(*self.cascade_resolution, self.cascade_count),
             components=4, dtype='f2'
         )
+        self.merge_tex = renderer.create_texture(self.cascade_resolution, swizzle='RGBA')
 
         self.t = 0
 
@@ -82,14 +84,33 @@ class Lighting:
                 ceil(self.cascade_resolution[0] / 16.0), 
                 ceil(self.cascade_resolution[1] / 16.0)
             )
+
+        self.merge_tex.bind_to_image(0, read=False)
+        self.merge.set_uniforms(
+            _cascadeTex=0, 
+            _cascadeResolution=self.cascade_resolution, 
+            _cascadeCount=self.cascade_count
+        )
+        self.merge.dispatch(
+            ceil(self.cascade_resolution[0] / 16.0), 
+            ceil(self.cascade_resolution[1] / 16.0)
+        )
+
         self.display()
 
     def display(self):
-        self.renderer.ctx.screen.use()
-        self.cascades.use(0)
-        self.blit.program['_cascadeTex'] = 0
-        self.blit.program['_cascadeIndex'] = self.t
-        self.blit.render()
+        # self.renderer.ctx.screen.use()
+        # self.cascades.use(0)
+        # self.blit.program['_cascadeTex'] = 0
+        # self.blit.program['_cascadeIndex'] = self.t
+        # self.blit.render()
 
-        self.t += 1
-        self.t %= self.cascade_count
+        # self.t += 1
+        # self.t %= self.cascade_count
+
+        d = self.renderer.default
+        self.renderer.ctx.screen.use()
+        self.merge_tex.use(0)
+        d.program['_mainTex'] = 0
+        d.program['_flip'] = False
+        d.render()
