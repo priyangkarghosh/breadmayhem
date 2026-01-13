@@ -67,7 +67,7 @@ class Lighting:
         # cascades
         self.build.set_uniforms(
             _emissiveTex=1, 
-            _absorptionTex=2,
+            _albedoTex=2,
             _renderResolution=self.renderer.render_size,
             _cascadeResolution=self.cascade_resolution,
             _cascadeScale=self.cascade_scale,
@@ -78,8 +78,10 @@ class Lighting:
         self.cascades.bind_to_image(0, read=False)
         for i in range(0, self.cascade_count):
             self.build.set_uniform('_cascadeIndex', i)
-            self.build.dispatch(self.cascade_resolution[0], self.cascade_resolution[1])
-
+            self.build.dispatch(
+                ceil(self.cascade_resolution[0] / 16.0), 
+                ceil(self.cascade_resolution[1] / 16.0)
+            )
         self.display()
 
     def display(self):
@@ -91,4 +93,3 @@ class Lighting:
 
         self.t += 1
         self.t %= self.cascade_count
-        time.sleep(2)

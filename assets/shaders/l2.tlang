@@ -32,42 +32,34 @@ const float EPSILON = 1e-3;
 #define LINEAR(c) pow(c.rgb, vec3(2.2))
 
 [link('build_cascade')]
-void raymarch(vec2 origin, vec2 delta, float range, out vec4 radiance, out vec4 transmittance) {
-    radiance = vec4(0.0, 0.0, 0.0, 1.0);
-    transmittance = vec4(1.0);
-    
+vec4 raymarch(vec2 origin, vec2 delta, float range) {
     const vec2 texel = 1.0 / _renderResolution;
-    
     vec2 ray = origin * texel;
     vec2 rayStep = delta * texel;
     for (float i = 0.0; i < range; i++) {
         ray += rayStep;
-        if (floor(ray) != vec2(0.0)) return;
+        if (floor(ray) != vec2(0.0)) break;
 
-        vec3 emiss = LINEAR(texture(_emissiveTex, ray).rgb);
-        vec3 absrp = LINEAR(texture(_absorptionTex, ray).rgb);
-        
-        // beer-lambert law integration
-        vec3 trans = exp(-absrp);
-        radiance.rgb += emiss * (1.0 - trans) * transmittance.rgb;
-        transmittance.rgb *= trans;
-        
-        // early termination if transmittance is negligible
-        if (all(lessThan(transmittance.rgb, vec3(EPSILON)))) {
-            transmittance.rgb = vec3(0.0);
-            return;
+        vec4 albedo = texture(_albedoTex, ray);
+        if (albedo.a > 0.0) {
+            // hit something, check for emission
+            vec3 emission = LINEAR(texture(_emissiveTex, ray).rgb);
+            if (length(emission) > 0.0) return vec4(emission, 0.0);
+            else return vec4(LINEAR(albedo.rgb), 0.0);
         }
     }
+
+    return vec4(0.0, 0.0, 0.0, 1.0);
 }
 
 // workgroups in format:
 // wg.x = cascade_size.x, wg.y = cascade_size.y
-[shader('compute'), numthreads(1, 1, 1)]
+[shader('compute'), numthreads(16, 16, 1)]
 [resourceblock(
     layout(rgba16f, binding=0) uniform writeonly image2DArray _cascadeTex;
 
+    uniform sampler2D _albedoTex;
     uniform sampler2D _emissiveTex;
-    uniform sampler2D _absorptionTex;
 
     uniform ivec2 _renderResolution;
     uniform ivec2 _cascadeResolution;
@@ -107,9 +99,7 @@ void build_cascade() {
         vec2 delta = vec2(cos(theta), -sin(theta));
 
         //
-        vec4 radiance, transmittance;
-        raymarch(origin + delta * offset, delta, range, radiance, transmittance);
-        accum += radiance * 0.25;
+        accum += raymarch(origin + delta * offset, delta, range) * 0.25;
     }
     
     imageStore(_cascadeTex, texCoord, accum);
