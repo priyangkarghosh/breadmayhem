@@ -129,8 +129,8 @@ while 1:
     #     pygame.draw.circle(reg["renderer"].layers[0]['emissive_surf'], (255, 255, 255), mp, 8)
     #     pygame.draw.circle(reg["renderer"].layers[0]['absorption_surf'], (255, 255, 255), mp, 8)
 
-    pygame.draw.circle(reg["renderer"].layers[0]['emissive_surf'], (255, 255, 255), (400, 225), 4)
-    pygame.draw.circle(reg["renderer"].layers[0]['absorption_surf'], (255, 255, 255), (400, 225), 4)
+    pygame.draw.circle(reg["renderer"].layers[0]['emissive_surf'], (255, 255, 255), (400, 225), 8)
+    pygame.draw.circle(reg["renderer"].layers[0]['absorption_surf'], (255, 255, 255), (400, 225), 8)
 
     if reg.inputs.mouse_scroll != 0:
         t += 5 * reg.inputs.mouse_scroll
