@@ -32,9 +32,10 @@ const float EPSILON = 1e-3;
 #define LINEAR(c) pow(c.rgb, vec3(2.2))
 
 [link('build_cascade')]
-vec4 raymarch(vec2 origin, vec2 delta, float range) {
+vec4 raymarch(vec2 origin, vec2 delta, float range, out vec2 ray) {
     const vec2 texel = 1.0 / _renderResolution;
-    vec2 ray = origin * texel;
+    
+    ray = origin * texel;
     vec2 rayStep = delta * texel;
     for (float i = 0.0; i < range; i++) {
         ray += rayStep;
@@ -52,11 +53,23 @@ vec4 raymarch(vec2 origin, vec2 delta, float range) {
     return vec4(0.0, 0.0, 0.0, 1.0);
 }
 
+[link('build_cascade')]
+vec2 get_origin(vec2 delta, float offset, int base, vec4 probe, vec2 linear) {
+    if (_cascadeIndex == 0) return ((probe.xy + 0.5) * linear) + delta * offset;
+    
+    float angularN1 = pow(2, _cascadeIndex - 1);
+    vec2 extentN1 = floor(_cascadeResolution / angularN1);
+    vec2 interpN1 = vec2(mod(base, angularN1), floor(base / angularN1)) * extentN1;
+    interpN1 += clamp((probe.xy * 0.5) + 0.25, vec2(0.5), extentN1 - 0.5);
+    return imageLoad(_rayTex, interpN1);
+}
+
 // workgroups in format:
 // wg.x = cascade_size.x, wg.y = cascade_size.y
 [shader('compute'), numthreads(16, 16, 1)]
 [resourceblock(
     layout(rgba16f, binding=0) uniform writeonly image2DArray _cascadeTex;
+    layout(rg16f, binding=0) uniform image2D _rayTex;
 
     uniform sampler2D _albedoTex;
     uniform sampler2D _emissiveTex;
@@ -95,11 +108,11 @@ void build_cascade() {
         float theta = (index + 0.5) * angleStep;
 
         //
-        vec2 origin = (probe.xy + 0.5) * linear;
         vec2 delta = vec2(cos(theta), -sin(theta));
 
         //
-        accum += raymarch(origin + delta * offset, delta, range) * 0.25;
+        vec2 origin = get_origin(delta, offset, index, probe, linear);
+        accum += raymarch(origin, delta, range) * 0.25;
     }
     
     imageStore(_cascadeTex, texCoord, accum);
@@ -149,9 +162,11 @@ void merge_cascades() {
     ivec2 extent = ivec2(floor(_cascadeResolution / sqrtAngular));
     ivec4 probe = ivec4(mod(texCoord.xy, extent), floor(texCoord.xy / extent));
     int base = int(probe.z + (probe.w * sqrtAngular)) * 4;
+
     vec4 r = imageLoad(_cascadeTex, texCoord);
     r = merge(r, base, extent, probe.xy) + merge(r, base + 1, extent, probe.xy) + merge(r, base + 2, extent, probe.xy) + merge(r, base + 3, extent, probe.xy);
     r *= 0.25;
     if (_cascadeIndex == 0) r.rgb = SRGB(r.rgb);
+
     imageStore(_cascadeTex, texCoord, r);
 }
