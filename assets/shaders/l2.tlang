@@ -94,33 +94,33 @@ void build_cascade() {
     imageStore(_cascadeTex, texCoord, rad);
 }
 
+struct ProbeInfo {
+    float angular;
+    float sqrtAngular;
+    ivec2 extent;
+    ivec4 probe;
+    float index;
+};
+
 [link('merge_cascades')]
-vec4 merge(vec4 radiance, float base, vec2 extent, vec2 probe) {
-    if (radiance.a == 0.0 || _cascadeIndex >= _cascadeCount - 1)
-        return vec4(radiance.rgb, 1 - radiance.a);
-    
-    float angularN1 = pow(2, _cascadeIndex + 1);
-    vec2 extentN1 = floor(_cascadeResolution / angularN1);
-    vec2 interpN1 = vec2(mod(base, angularN1), floor(base / angularN1)) * extentN1;
-    interpN1 += clamp((probe * 0.5) + 0.25, vec2(0.5), extentN1 - 0.5);
-    
-    // Bilinear interpolation
-    vec2 texelCoord = interpN1 - 0.5;
-    ivec2 baseCoord = ivec2(floor(texelCoord));
-    vec2 frac = texelCoord - vec2(baseCoord);
-    
-    // Sample 4 neighboring texels
-    vec4 s00 = imageLoad(_cascadeTex, ivec3(baseCoord + ivec2(0, 0), _cascadeIndex + 1));
-    vec4 s10 = imageLoad(_cascadeTex, ivec3(baseCoord + ivec2(1, 0), _cascadeIndex + 1));
-    vec4 s01 = imageLoad(_cascadeTex, ivec3(baseCoord + ivec2(0, 1), _cascadeIndex + 1));
-    vec4 s11 = imageLoad(_cascadeTex, ivec3(baseCoord + ivec2(1, 1), _cascadeIndex + 1));
-    
-    // Bilinear blend
-    vec4 s0 = mix(s00, s10, frac.x);
-    vec4 s1 = mix(s01, s11, frac.x);
-    vec4 mergeRadiance = mix(s0, s1, frac.y);
-    
-    return vec4(radiance.rgb + mergeRadiance.rgb * radiance.a, radiance.a * mergeRadiance.a);
+ProbeInfo get_probe(ivec2 texCoord, int cascadeIndex) {
+    float angular = 4 * pow(4, cascadeIndex);
+    float sqrtAngular = sqrt(angular);
+    ivec2 extent = ivec2(floor(_cascadeResolution / sqrtAngular));
+    ivec4 probe = ivec4(mod(texCoord.xy, extent), floor(texCoord.xy / extent));
+    float index = floor(probe.z + (probe.w * sqrtAngular));
+    return ProbeInfo(angular, sqrtAngular, extent, probe, index);
+}
+
+[link('merge_cascades')]
+vec4 cascadeFetch(ProbeInfo info, int cascadeIndex, vec2 texelIndex, float thetaIndex) {
+	vec2 probeTexel = texelIndex * info.sqrtAngular;
+	probeTexel += vec2(mod(thetaIndex, info.sqrtAngular), thetaIndex / info.sqrtAngular);
+
+	vec2 cascadeTexelPosition = probeTexel / _cascadeResolution;
+	if (cascadeTexelPosition.x < 0.0 || cascadeTexelPosition.y < 0.0 || cascadeTexelPosition.x >= 1.0 || cascadeTexelPosition.y >= 1.0)
+		return vec4(0.0, 0.0, 0.0, 0.0);
+	return imageLoad(_cascadeTex, ivec3(probeTexel, cascadeIndex));
 }
 
 [shader('compute'), numthreads(16, 16, 1)]
@@ -133,16 +133,41 @@ vec4 merge(vec4 radiance, float base, vec2 extent, vec2 probe) {
 void merge_cascades() {
     // calculate texcoord
     ivec3 texCoord = ivec3(gl_GlobalInvocationID.xy, _cascadeIndex);
+    ProbeInfo probeInfo = get_probe(texCoord.xy, _cascadeIndex);
+    ProbeInfo probeInfoN1 = get_probe(texCoord.xy, _cascadeIndex + 1);
 
-    float angular = 4 * pow(4, _cascadeIndex);
-    float sqrtAngular = sqrt(angular);
-    ivec2 extent = ivec2(floor(_cascadeResolution / sqrtAngular));
-    ivec4 probe = ivec4(mod(texCoord.xy, extent), floor(texCoord.xy / extent));
-    
+	vec2 texelIndexN1 = floor((vec2(probeInfo.probe.xy) - 1.0) / 2.0);
+	vec2 texelIndexN1_N = floor((texelIndexN1 * 2.0) + 1.0);
+
     //
-    int index = int(probe.z + (probe.w * sqrtAngular));
-    vec4 r = imageLoad(_cascadeTex, texCoord);
-    r = merge(r, index, extent, probe.xy);
-    if (_cascadeIndex == 0) r.rgb = SRGB(r.rgb);
-    imageStore(_cascadeTex, texCoord, r);
+	vec4 radiance = imageLoad(_cascadeTex, texCoord);
+	radiance.a = 1.0 - radiance.a;
+
+	// Check ray visibility term from raymarching, on hit merge, otherwise no merge:
+	if (radiance.a != 0.0 && _cascadeIndex < _cascadeCount - 1.0) {
+		vec4 TL = vec4(0.0), TR = vec4(0.0), BL = vec4(0.0), BR = vec4(0.0);
+		
+		// We always default to a 4x ray branch scaling between cascades.
+		const float branch4 = 4.0;
+		for(float i = 0.0; i < branch4; i++) {
+			float thetaIndexN1 = (probeInfo.index * branch4) + i;
+			TL += cascadeFetch(probeInfoN1, _cascadeIndex + 1, texelIndexN1 + vec2(0.0,0.0), thetaIndexN1);
+			TR += cascadeFetch(probeInfoN1, _cascadeIndex + 1, texelIndexN1 + vec2(1.0,0.0), thetaIndexN1);
+			BL += cascadeFetch(probeInfoN1, _cascadeIndex + 1, texelIndexN1 + vec2(0.0,1.0), thetaIndexN1);
+			BR += cascadeFetch(probeInfoN1, _cascadeIndex + 1, texelIndexN1 + vec2(1.0,1.0), thetaIndexN1);
+		}
+		
+		// Per Specification:
+		//vec2 weight = vec2(0.25) + (vec2(probeInfo.probe) - texelIndexN1_N) * vec2(0.5);
+		
+		// Smoother Weights:
+		vec2 weight = vec2(0.33) + (vec2(probeInfo.probe.xy) - texelIndexN1_N) * vec2(0.33);
+		
+		vec4 interpolated = mix(mix(TL, TR, weight.x), mix(BL, BR, weight.x), weight.y) / branch4;
+		interpolated.a = 1.0 - interpolated.a;
+		radiance += radiance.a * interpolated;
+	}
+	
+    if (_cascadeIndex == 0) radiance.rgb = SRGB(radiance.rgb);
+    imageStore(_cascadeTex, texCoord, vec4(radiance.rgb, 1.0));
 }
