@@ -1,10 +1,14 @@
+[include(dda)]
 [program('blit', vert='default_vert', frag='blit')]
+
+const float TAU = 6.28318530718;
+const float EPSILON = 1e-3;
 
 #define TONEMAP(c) (1.0 - (1.0 / (1.0 + c.rgb)))
 #define SRGB(c) pow(c.rgb, vec3(1.0 / 2.2))
 #define LINEAR(c) pow(c.rgb, vec3(2.2))
 
-[link('cascades')]
+[link('build_cascade')]
 void raymarch(vec2 origin, vec2 delta, float range, out vec4 r, out vec4 t) {
     r = vec4(0.0, 0.0, 0.0, 1.0);
     t = vec4(1.0);
@@ -18,8 +22,8 @@ void raymarch(vec2 origin, vec2 delta, float range, out vec4 r, out vec4 t) {
 
     int i;
     for (i = 0; i < numSteps; i++) {
-        float t = i * rmStepSize;
-        vec2 ray = origin + delta * t;
+        float tProg = i * rmStepSize;
+        vec2 ray = origin + delta * tProg;
         
         // bounds checking
         vec2 uv = ray * texel;
@@ -31,8 +35,8 @@ void raymarch(vec2 origin, vec2 delta, float range, out vec4 r, out vec4 t) {
         
         int idx = cell.x + cell.y * gridSize.x;
         if (grid[idx] != 0) {
-            float mip = float(_cascadeIndex) * 0.5 + (t / range);    
-            vec3 emiss = LINEAR(textureLod(_emissiveTex, uv, mip).rgb + texture(_diffuseTex, uv).rgb);
+            float mip = float(_cascadeIndex) * 0.5 + (tProg / range);    
+            vec3 emiss = LINEAR(textureLod(_emissiveTex, uv, mip).rgb);
             vec3 absrp = LINEAR(textureLod(_absorptionTex, uv, mip).rgb);
             
             // beer-lambert law integration
@@ -64,9 +68,34 @@ void raymarch(vec2 origin, vec2 delta, float range, out vec4 r, out vec4 t) {
     }
 }
 
+//[link('build_cascade')]
+void raymarch(vec2 origin, vec2 delta, float range, out vec4 r, out vec4 t) {
+    vec2 texel = 1.0 / _renderResolution;
+
+    vec2 ray = origin * texel;
+    vec2 step = delta * texel;
+
+    r = vec4(0.0);
+    t = vec4(1.0);
+    for(float i = 0.0; i < range; i++) {
+        ray += step;
+        if (floor(ray) != vec2(0.0)) break;
+        
+        vec3 emiss = LINEAR(texture(_emissiveTex, ray).rgb);
+		vec3 absrp = LINEAR(texture(_absorptionTex, ray).rgb);
+		vec3 trans = exp(-absrp);
+		vec3 radnc = (1.0 - trans) * emiss;
+
+		r.rgb += radnc * t.rgb;
+		t.rgb *= trans;
+    }
+
+    r = vec4(r.rgb, 1.0);
+}
+
 [link('build_cascade')]
 vec4 merge(vec4 radianceN, vec4 transmittanceN, int index, vec2 probe) {
-	if (_cascadeIndex >= _cascadeCount - 1) return radiance;
+	if (_cascadeIndex >= _cascadeCount - 1) return radianceN;
     
 	uint angularN1 = 1 << (_cascadeIndex + 1);
 	uvec2 extentN1 = _cascadeResolution / angularN1;
@@ -123,12 +152,12 @@ void build_cascade() {
 
     // cast rays using pre-averaging
     [unroll]
-	for (float i = 0; i < 4; i++) {
-        float index = base + i;
+	for (int i = 0; i < 4; i++) {
+        int index = base + i;
 		float theta = (index + 0.5) * (TAU / angular);
 
-        vec2 start = origin + delta * offset;
         vec2 delta = vec2(cos(theta), -sin(theta));
+        vec2 start = origin + delta * offset;
 
         vec4 r, t;
 		raymarch(start, delta, range, r, t);
@@ -136,10 +165,8 @@ void build_cascade() {
     }
 
     // tonemap + SRGB conversion for final cascade
-    if (_cascadeIndex == 0) {
-        radiance = vec4(SRGB(TONEMAP(radiance.rgb)), 1.0);
-        imageStore(_mainTex, texCoord, radiance);
-    }
+    if (_cascadeIndex == 0) radiance = vec4(SRGB(TONEMAP(radiance.rgb)), 1.0);
+    imageStore(_mainTex, ivec2(texCoord), radiance);
 }
 
 [shader('vert')]
@@ -174,7 +201,7 @@ void blit() {
     vec4 S0 = texelFetch(_cascadeTex, q + h.yy, 0); // (0,0)
     vec4 S1 = texelFetch(_cascadeTex, q + h.xy, 0); // (1,0)
     vec4 S2 = texelFetch(_cascadeTex, q + h.yx, 0); // (0,1)
-    vec4 S3 = texelFetch(_cascadeTex q + h.xx, 0); // (1,1)
+    vec4 S3 = texelFetch(_cascadeTex, q + h.xx, 0); // (1,1)
     
     // Bilinear interpolation
     vec3 fluence = mix(mix(S0.rgb, S1.rgb, w.x), mix(S2.rgb, S3.rgb, w.x), w.y);

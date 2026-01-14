@@ -4,7 +4,7 @@ from array import array
 from typing import Literal, TypedDict
 
 from toaster.rendering.camera import Camera
-from toaster.rendering.lighting import Lighting
+from toaster.rendering.lcomp import Lighting
 from toaster.registry.registry_item import RegistryItem
 from tlang import ShaderManager
 

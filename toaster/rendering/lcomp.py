@@ -32,7 +32,7 @@ class Lighting:
         if lighting_sh is None: raise RuntimeError("Lighting shader not loaded")
 
         # load programs from shader
-        self.build_cascade = lighting_sh.get_kernel('build_cascade')
+        self.build = lighting_sh.get_kernel('build_cascade')
         self.blit = renderer.create_screen_vao(lighting_sh.get_program('blit'))
 
         # create render textures/buffers
@@ -47,6 +47,10 @@ class Lighting:
             filter=(mgl.LINEAR, mgl.LINEAR),
             dtype='f2'
         )
+
+        # dda
+        self.dda_kernel = renderer.shaders.get_shader('dda').get_kernel('dda')
+        self.dda_buff = self.renderer.ctx.buffer(reserve=(4 * (ceil(self.renderer.render_size[0] / float(32)) * ceil(self.renderer.render_size[1] / float(32)))))
 
     def render(
         self, 
@@ -65,24 +69,35 @@ class Lighting:
         self.absorption_tex.build_mipmaps()
         self.absorption_tex.use(2)
 
-        # cascades
+        self.cascades_dbuf.clear(a=1)
+
+        # set up dda
+        t = (ceil(self.renderer.render_size[0] / float(32)), ceil(self.renderer.render_size[1] / float(32)))
+        self.dda_kernel.bind_ssbo("Grid", self.dda_buff)
+        self.dda_kernel.set_uniforms(_mainTex=2)
+        self.dda_kernel.dispatch(t[0], t[1])
+
+        # build cascades
         self.build.set_uniforms(
-            _emissiveTex=1, 
-            _albedoTex=2,
+            _mergeTex=0, _emissiveTex=1, _absorptionTex=2,
             _renderResolution=self.renderer.render_size,
             _cascadeResolution=self.cascade_resolution,
             _cascadeScale=self.cascade_scale,
             _cascadeInterval=self.cascade_interval,
-        #    _cascadeCount=self.cascade_count
+            _cascadeCount=self.cascade_count
         )
 
-        self.cascades.bind_to_image(0, read=False)
-        for i in range(0, self.cascade_count):
+        for i in range(self.cascade_count - 1, -1, -1):
+            self.cascades_dbuf.next.tex().bind_to_image(0)
+            self.cascades_dbuf.current.tex().use(0)
+
             self.build.set_uniform('_cascadeIndex', i)
             self.build.dispatch(
                 ceil(self.cascade_resolution[0] / 16.0), 
                 ceil(self.cascade_resolution[1] / 16.0)
             )
+
+            self.cascades_dbuf.flip()
 
         # self.cascades.bind_to_image(0)
         # self.merge.set_uniforms(
@@ -100,19 +115,7 @@ class Lighting:
 
     def display(self):
         self.renderer.ctx.screen.use()
-        self.cascades.use(0)
+        self.cascades_dbuf.current.tex().use(0)
         self.blit.program['_cascadeTex'] = 0
-        self.blit.program['_cascadeIndex'] = self.t
+        self.blit.program['_renderResolution'] = self.renderer.render_size
         self.blit.render()
-
-        self.t += 1
-        self.t %= self.cascade_count
-
-        # d = self.renderer.default
-        # self.renderer.ctx.screen.use()
-        # self.merge_tex.use(0)
-        # d.program['_mainTex'] = 0
-        # d.program['_flip'] = False
-        # d.render()
-
-        time.sleep(2)
