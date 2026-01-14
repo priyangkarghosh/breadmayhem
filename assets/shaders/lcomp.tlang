@@ -1,0 +1,183 @@
+[program('blit', vert='default_vert', frag='blit')]
+
+#define TONEMAP(c) (1.0 - (1.0 / (1.0 + c.rgb)))
+#define SRGB(c) pow(c.rgb, vec3(1.0 / 2.2))
+#define LINEAR(c) pow(c.rgb, vec3(2.2))
+
+[link('cascades')]
+void raymarch(vec2 origin, vec2 delta, float range, out vec4 r, out vec4 t) {
+    r = vec4(0.0, 0.0, 0.0, 1.0);
+    t = vec4(1.0);
+    
+    const vec2 texel = 1.0 / _renderResolution;
+    const vec2 cellSize = vec2(SUBGROUP_SIZE);
+    const ivec2 gridSize = ivec2(ceil(_renderResolution / cellSize));
+    const float rmStepSize = exp2(_cascadeIndex - 2);
+    
+    int numSteps = int(ceil(range / rmStepSize));
+
+    int i;
+    for (i = 0; i < numSteps; i++) {
+        float t = i * rmStepSize;
+        vec2 ray = origin + delta * t;
+        
+        // bounds checking
+        vec2 uv = ray * texel;
+        if (floor(uv) != vec2(0.0)) return;
+        
+        ivec2 cell = ivec2(floor(ray / cellSize));
+        if (any(lessThan(cell, ivec2(0))) || any(greaterThanEqual(cell, gridSize))) 
+            return;
+        
+        int idx = cell.x + cell.y * gridSize.x;
+        if (grid[idx] != 0) {
+            float mip = float(_cascadeIndex) * 0.5 + (t / range);    
+            vec3 emiss = LINEAR(textureLod(_emissiveTex, uv, mip).rgb + texture(_diffuseTex, uv).rgb);
+            vec3 absrp = LINEAR(textureLod(_absorptionTex, uv, mip).rgb);
+            
+            // beer-lambert law integration
+            vec3 trans = exp(-absrp * rmStepSize);
+            vec3 coeff = (1.0 - trans) / max(absrp, vec3(EPSILON));
+            r.rgb += emiss * coeff * t.rgb;
+            t.rgb *= trans;
+            
+            // early termination if transmittance is negligible
+            if (all(lessThan(t.rgb, vec3(EPSILON)))) {
+                t.rgb = vec3(0.0);
+                return;
+            }
+        }
+        else {
+            // DDA traversal: calculate distance to next cell boundary
+            vec2 cellPos = ray - vec2(cell) * cellSize;
+            vec2 deltaNorm = normalize(delta);
+            vec2 step = sign(deltaNorm);
+            
+            // distance to the next cell boundary in each axis
+            vec2 tMax = ((step * 0.5 + 0.5) * cellSize - cellPos) / deltaNorm;
+            
+            // take the minimum to find which boundary we hit first
+            float tNext = min(tMax.x, tMax.y);
+            int skipSteps = max(1, int(floor(tNext / rmStepSize)));
+            i += skipSteps - 1; // -1 because loop will increment
+        }
+    }
+}
+
+[link('build_cascade')]
+vec4 merge(vec4 radianceN, vec4 transmittanceN, int index, vec2 probe) {
+	if (_cascadeIndex >= _cascadeCount - 1) return radiance;
+    
+	uint angularN1 = 1 << (_cascadeIndex + 1);
+	uvec2 extentN1 = _cascadeResolution / angularN1;
+    
+	vec2 interpN1 = vec2(floor(mod(index, angularN1)), floor(index / angularN1)) * extentN1;
+    interpN1 += clamp((probe * 0.5) + 0.25, vec2(0.5), extentN1 - 0.5);
+
+    vec4 radianceN1 = texture(_mergeTex, interpN1 / _cascadeResolution);
+	return radianceN + radianceN1 * transmittanceN;
+}
+
+[shader('compute'), numthreads(16, 16, 1)]
+[resourceblock(
+    // output texture
+    layout(rgba16f, binding=0) uniform writeonly image2D _mainTex;
+
+    // input textures
+    uniform sampler2D _mergeTex;
+    uniform sampler2D _emissiveTex;
+    uniform sampler2D _absorptionTex;
+
+    // cascade properties
+    uniform uint _cascadeIndex;
+    uniform uint _cascadeCount;
+    uniform float _cascadeScale;
+    uniform float _cascadeInterval;
+
+    uniform uvec2 _renderResolution;
+    uniform uvec2 _cascadeResolution;
+)]
+void build_cascade() {
+    uvec2 texCoord = uvec2(gl_GlobalInvocationID.xy);
+    if (any(greaterThanEqual(texCoord, _cascadeResolution))) return;
+
+    // cascade properties
+    uint sqrtAngular = 1 << _cascadeIndex;
+    uint angular = sqrtAngular * sqrtAngular * 4;
+    uvec2 extent = _cascadeResolution / sqrtAngular;
+    uvec4 probe = uvec4(mod(texCoord, extent), texCoord / extent);
+    vec2 linear = vec2(_cascadeScale * sqrtAngular);
+
+    // ray properties
+    vec2 origin = (probe.xy + 0.5) * linear;
+
+    float pow4 = floor(1 << (2 * _cascadeIndex));
+    float offset = _cascadeInterval * ((1.0 - pow4) / -3.0);
+    float range = _cascadeInterval * pow4;
+
+    int base = int(probe.z + (probe.w * sqrtAngular)) * 4;
+    float angleStep = TAU / angular;
+
+    // init final radiance
+    vec4 radiance = vec4(0);
+
+    // cast rays using pre-averaging
+    [unroll]
+	for (float i = 0; i < 4; i++) {
+        float index = base + i;
+		float theta = (index + 0.5) * (TAU / angular);
+
+        vec2 start = origin + delta * offset;
+        vec2 delta = vec2(cos(theta), -sin(theta));
+
+        vec4 r, t;
+		raymarch(start, delta, range, r, t);
+		radiance += merge(r, t, index, probe.xy) * 0.25;
+    }
+
+    // tonemap + SRGB conversion for final cascade
+    if (_cascadeIndex == 0) {
+        radiance = vec4(SRGB(TONEMAP(radiance.rgb)), 1.0);
+        imageStore(_mainTex, texCoord, radiance);
+    }
+}
+
+[shader('vert')]
+[resourceblock(
+    in vec2 vert;
+    in vec2 texCoord;
+    out vec2 v_uv;
+)]
+void default_vert() {
+    v_uv = vec2(texCoord.x, clamp(1.0 - texCoord.y, 0.0, 1.0));
+    gl_Position = vec4(vert, 0.0, 1.0);
+}
+
+[shader('frag')]
+[resourceblock(
+    uniform sampler2D _cascadeTex;
+    uniform uvec2 _renderResolution;
+
+    in vec2 v_uv;
+    out vec4 fragColour;
+)]
+void blit() {
+    vec2 uv = vec2(v_uv.x, 1.0 - v_uv.y);
+    
+    // Map to radiance texture coordinates
+    vec2 p = uv * _renderResolution;
+    ivec2 q = ivec2(floor(p));
+    vec2 w = fract(p);
+    
+    // Fetch 4 neighboring samples for bilinear interpolation
+    ivec2 h = ivec2(1, 0);
+    vec4 S0 = texelFetch(_cascadeTex, q + h.yy, 0); // (0,0)
+    vec4 S1 = texelFetch(_cascadeTex, q + h.xy, 0); // (1,0)
+    vec4 S2 = texelFetch(_cascadeTex, q + h.yx, 0); // (0,1)
+    vec4 S3 = texelFetch(_cascadeTex q + h.xx, 0); // (1,1)
+    
+    // Bilinear interpolation
+    vec3 fluence = mix(mix(S0.rgb, S1.rgb, w.x), mix(S2.rgb, S3.rgb, w.x), w.y);
+    const vec3 W = vec3(0.2125, 0.7154, 0.0721);
+    fragColour = vec4(mix(vec3(dot(fluence, W)), fluence, 1.5), 1.0);
+}
