@@ -125,9 +125,9 @@ while 1:
     if not reg.inputs['enable'].pressed:
         mp = list(reg.inputs.mouse_pos)
         mp[0] *= 0.5; mp[1] *= 0.5
-        pygame.draw.circle(reg["renderer"].layers[0]['albedo_surf'], (1, 1, 1), mp, 8)
-        pygame.draw.circle(reg["renderer"].layers[0]['emissive_surf'], (255, 255, 255), mp, 8)
-        pygame.draw.circle(reg["renderer"].layers[0]['absorption_surf'], (255, 255, 255), mp, 8)
+        pygame.draw.circle(reg["renderer"].layers[0]['albedo_surf'], (1, 1, 1), mp, 4)
+        pygame.draw.circle(reg["renderer"].layers[0]['emissive_surf'], (255, 255, 255), mp, 4)
+        pygame.draw.circle(reg["renderer"].layers[0]['absorption_surf'], (255, 255, 255), mp, 4)
     
     if reg.inputs.mouse_scroll != 0:
         t += 5 * reg.inputs.mouse_scroll
