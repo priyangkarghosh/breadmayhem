@@ -23,8 +23,8 @@ class Lighting:
         # calculate cascade res
         cc = float(2 ** (self.cascade_count - 1))
         self.cascade_resolution = (
-            int(ceil(self.renderer.render_size[0] / cc) * cc),
-            int(ceil(self.renderer.render_size[1] / cc) * cc)
+            int(ceil(self.renderer.render_size[0] / cc) * cc) * 2,
+            int(ceil(self.renderer.render_size[1] / cc) * cc) * 2
         )
         
         # get lighting shader
