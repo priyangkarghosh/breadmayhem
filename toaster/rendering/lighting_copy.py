@@ -85,17 +85,17 @@ class Lighting:
                 ceil(self.cascade_resolution[1] / 16.0)
             )
 
-        # self.cascades.bind_to_image(0)
-        # self.merge.set_uniforms(
-        #     _cascadeResolution=self.cascade_resolution, 
-        #     _cascadeCount=self.cascade_count
-        # )
-        # for i in range(self.cascade_count, -1, -1):
-        #     self.merge.set_uniform('_cascadeIndex', i)
-        #     self.merge.dispatch(
-        #         ceil(self.cascade_resolution[0] / 16.0), 
-        #         ceil(self.cascade_resolution[1] / 16.0)
-        #     )
+        self.cascades.bind_to_image(0)
+        self.merge.set_uniforms(
+            _cascadeResolution=self.cascade_resolution, 
+            _cascadeCount=self.cascade_count
+        )
+        for i in range(self.cascade_count, -1, -1):
+            self.merge.set_uniform('_cascadeIndex', i)
+            self.merge.dispatch(
+                ceil(self.cascade_resolution[0] / 16.0), 
+                ceil(self.cascade_resolution[1] / 16.0)
+            )
 
         self.display()
 
@@ -103,11 +103,11 @@ class Lighting:
         self.renderer.ctx.screen.use()
         self.cascades.use(0)
         self.blit.program['_cascadeTex'] = 0
-        self.blit.program['_cascadeIndex'] = self.t
+        self.blit.program['_cascadeIndex'] = 0
         self.blit.render()
 
-        self.t += 1
-        self.t %= self.cascade_count
+        # self.t += 1
+        # self.t %= self.cascade_count
 
         # d = self.renderer.default
         # self.renderer.ctx.screen.use()
@@ -115,5 +115,3 @@ class Lighting:
         # d.program['_mainTex'] = 0
         # d.program['_flip'] = False
         # d.render()
-
-        time.sleep(2)
